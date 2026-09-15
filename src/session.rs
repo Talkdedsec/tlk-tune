@@ -22,10 +22,7 @@ pub struct QueuedTrack {
 }
 
 fn path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("tlk-tune")
-        .join("session.json")
+    crate::config::profile_dir().join("session.json")
 }
 
 pub fn load() -> Session {

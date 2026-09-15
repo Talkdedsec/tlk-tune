@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use crate::lang::Language;
 
@@ -382,11 +383,31 @@ impl Config {
     }
 }
 
+static OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+
+/// Points the whole profile somewhere else. The session and the statistics
+/// live beside the config, so one flag moves all of it and a player can be
+/// carried around on a stick.
+pub fn use_path(file: &Path) {
+    let _ = OVERRIDE.set(file.to_path_buf());
+}
+
 pub fn config_path() -> PathBuf {
+    if let Some(chosen) = OVERRIDE.get() {
+        return chosen.clone();
+    }
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("tlk-tune")
         .join("config.txt")
+}
+
+/// Where everything else that belongs to this profile is kept.
+pub fn profile_dir() -> PathBuf {
+    config_path()
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn unquote(value: &str) -> String {

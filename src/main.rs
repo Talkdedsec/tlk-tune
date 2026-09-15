@@ -28,7 +28,19 @@ fn report(result: Result<String, String>) {
 }
 
 fn run() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+
+    // Has to happen before anything reads the config.
+    if args.first().map(String::as_str) == Some("--config") {
+        match args.get(1) {
+            Some(path) => config::use_path(std::path::Path::new(path)),
+            None => {
+                eprintln!("tlk-tune: --config needs a path");
+                return;
+            }
+        }
+        args.drain(..2);
+    }
     match args.first().map(String::as_str) {
         Some("--preview") => {
             let width = args
@@ -36,8 +48,23 @@ fn run() {
                 .and_then(|w| w.parse::<usize>().ok())
                 .unwrap_or(155)
                 .clamp(40, 200);
-            let query = args.get(2).cloned().unwrap_or_default();
-            print!("{}", app::App::new().preview(width, &query));
+            let mut rest = args[1.min(args.len())..].iter().skip(1);
+            let mut screen = String::new();
+            let mut rows = 0usize;
+            let mut words: Vec<String> = Vec::new();
+            while let Some(word) = rest.next() {
+                match word.as_str() {
+                    "--screen" => screen = rest.next().cloned().unwrap_or_default(),
+                    "--rows" => {
+                        rows = rest.next().and_then(|r| r.parse().ok()).unwrap_or(0);
+                    }
+                    _ => words.push(word.clone()),
+                }
+            }
+            print!(
+                "{}",
+                app::App::new().preview(width, rows, &words.join(" "), &screen)
+            );
         }
         Some("--version") => println!("tlk-tune {}", env!("CARGO_PKG_VERSION")),
         Some("--install") => report(install::install()),
@@ -59,7 +86,9 @@ fn run() {
             println!("  tlk-tune <words>      open with that search");
             println!("  tlk-tune --install    put tlk-tune on your PATH");
             println!("  tlk-tune --uninstall  take it back off");
-            println!("  tlk-tune --preview N [query]");
+            println!("  tlk-tune --config <file> ...");
+            println!("                        keep the profile somewhere else");
+            println!("  tlk-tune --preview N [--rows M] [--screen NAME] [query]");
             println!("                        render one frame at width N and exit");
             println!("  tlk-tune --version");
         }
