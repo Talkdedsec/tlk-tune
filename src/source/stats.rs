@@ -24,10 +24,7 @@ pub struct Stats {
 }
 
 fn path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("tlk-tune")
-        .join("stats.json")
+    crate::config::profile_dir().join("stats.json")
 }
 
 fn key(track: &Path) -> String {
