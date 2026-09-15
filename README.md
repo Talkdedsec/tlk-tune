@@ -1,7 +1,7 @@
 # tlk-tune
 
 A terminal music player for Windows. One executable, no runtime dependencies,
-keyboard only.
+keyboard and mouse.
 
 ```
 tlk-tune
