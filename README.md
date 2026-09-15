@@ -23,10 +23,12 @@ tlk-tune
 - Queue, shuffle, repeat, folder filter, and a fuzzy search that ignores
   accents, so `oguzhan` finds `Oguzhan` and `dunya` finds `Dunya`.
 - **Album art** drawn in colour where the record sits, from the cover embedded
-  in the file; the spinning vinyl is the fallback.
+  in the file or a `cover.jpg` beside it; the spinning vinyl is the fallback.
 - **Ten-band equaliser** with presets, adjustable by arrow keys or by clicking
   the slider.
 - **Gapless** track changes, and an optional crossfade up to twelve seconds.
+- **Volume levelling** to EBU R 128: every track is measured once, then played
+  at a consistent loudness, with a soft limiter instead of hard clipping.
 - **Likes, play counts and views**: `l` likes a track, `v` cycles the list
   between all, liked, most played and recently played. Likes and counts import
   themselves from tlk-player on first run if it is installed.
@@ -76,6 +78,8 @@ streaming and downloads.
 | Change sort | `o` |
 | Like / unlike | `l` |
 | Change view | `v` |
+| Filter by artist | `g` |
+| Reorder the queue | `Shift+↑` / `Shift+↓` |
 | Download stream | `y` |
 | Settings | `s` |
 | Quit | `q` |
@@ -121,6 +125,8 @@ LyricsPlaceholderBall=false
 VisualizerFluidity=10
 LyricsAnimation=word by word
 CrossfadeMs=0
+Normalize=true
+NormalizeTarget=-18.0
 Equalizer=0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
 
 LocalMusicPath=D:\Music

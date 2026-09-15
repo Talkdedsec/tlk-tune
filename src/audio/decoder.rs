@@ -186,7 +186,12 @@ fn run(source: &Source, sink: &PcmStream) -> Option<()> {
         }
         buf.copy_interleaved_ref(decoded);
 
-        remix(buf.samples(), spec.channels.count(), out_channels, &mut staging);
+        remix(
+            buf.samples(),
+            spec.channels.count(),
+            out_channels,
+            &mut staging,
+        );
 
         let written = if spec.rate != out_rate {
             let r =
@@ -374,7 +379,10 @@ mod tests {
         let available = sink.available_samples();
         assert!(available > 1000);
         for frame in 0..500 {
-            assert_eq!(sink.at(frame * 2, available), sink.at(frame * 2 + 1, available));
+            assert_eq!(
+                sink.at(frame * 2, available),
+                sink.at(frame * 2 + 1, available)
+            );
         }
     }
 

@@ -11,6 +11,10 @@ pub struct Stats {
     pub plays: HashMap<String, u32>,
     pub liked: HashSet<String>,
     pub last_played: HashMap<String, u64>,
+    /// Measured integrated loudness per file, so a track is only analysed the
+    /// first time it is played.
+    #[serde(default)]
+    pub loudness: HashMap<String, f64>,
     #[serde(default)]
     dirty: bool,
 }
@@ -100,6 +104,15 @@ impl Stats {
         self.dirty = true;
     }
 
+    pub fn loudness(&self, track: &Path) -> Option<f64> {
+        self.loudness.get(&key(track)).copied()
+    }
+
+    pub fn set_loudness(&mut self, track: &Path, lufs: f64) {
+        self.loudness.insert(key(track), lufs);
+        self.dirty = true;
+    }
+
     pub fn liked_count(&self) -> usize {
         self.liked.len()
     }
@@ -127,7 +140,11 @@ pub fn import_from_tlk_player(stats: &mut Stats) -> Option<(usize, usize)> {
     let mut likes = 0usize;
     if let Some(list) = playlists.get("likes").and_then(|v| v.as_array()) {
         for like in list {
-            if like.get("removed").and_then(|v| v.as_bool()).unwrap_or(false) {
+            if like
+                .get("removed")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
                 continue;
             }
             let Some(id) = like.get("id").and_then(|v| v.as_str()) else {

@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::audio::buffer::PcmStream;
 use crate::audio::decoder::{self, Source, TrackInfo};
+use crate::audio::loudness;
 use crate::audio::player::Player;
 use crate::config::{self, Config};
 use crate::lang::{Language, Strings};
@@ -105,6 +106,7 @@ pub enum Message {
     ResolveFailed,
     Lyrics(Lyrics),
     Waveform(Vec<f32>),
+    Loudness(PathBuf, f64),
     Artwork(Vec<String>),
     Status(String),
 }
@@ -155,6 +157,7 @@ pub struct App {
     pub sort_mode: SortMode,
     pub view_mode: ViewMode,
     pub folder_filter: Option<String>,
+    pub artist_filter: Option<String>,
     pub stats: Stats,
 
     pub settings_tab: i32,
@@ -275,6 +278,7 @@ impl App {
             sort_mode,
             view_mode: ViewMode::All,
             folder_filter: None,
+            artist_filter: None,
             stats,
 
             settings_tab: 0,
@@ -403,6 +407,7 @@ impl App {
     pub fn refresh_view(&mut self) {
         let query = self.last_local_query.clone();
         let folder = self.folder_filter.clone();
+        let artist_filter = self.artist_filter.clone();
         let mode = self.view_mode;
         let meta = &self.row_meta;
         let stats = &self.stats;
@@ -418,6 +423,13 @@ impl App {
             })
             .filter(|t| match &folder {
                 Some(f) => &t.folder == f,
+                None => true,
+            })
+            .filter(|t| match &artist_filter {
+                Some(want) => meta
+                    .get(&t.path)
+                    .map(|m| m.artist.eq_ignore_ascii_case(want))
+                    .unwrap_or(false),
                 None => true,
             })
             .filter(|t| {
@@ -585,7 +597,24 @@ impl App {
         self.lyrics_status_at = Instant::now();
         self.play_counted = false;
         self.spectrum.reset();
+        self.apply_track_gain();
         info
+    }
+
+    /// Replay gain for the track that is starting. A file measured on an
+    /// earlier run is corrected from the first sample; a new one gets its
+    /// correction once the analysis thread reports back.
+    fn apply_track_gain(&self) {
+        let measured = self
+            .current_path
+            .as_ref()
+            .filter(|_| self.cfg.normalize)
+            .and_then(|p| self.stats.loudness(p));
+        let db = match measured {
+            Some(lufs) => loudness::gain_db(lufs, self.cfg.normalize_target),
+            None => 0.0,
+        };
+        self.player.set_track_gain_db(db);
     }
 
     pub fn start(&mut self, source: Source, fallback_title: &str) {
@@ -611,6 +640,13 @@ impl App {
         let wave_sink = Arc::clone(&pcm);
         let wave_tx = self.tx.clone();
         let smooth = self.cfg.waveform_smooth;
+        let measure = self.cfg.normalize
+            && self
+                .current_path
+                .as_ref()
+                .map(|p| self.stats.loudness(p).is_none())
+                .unwrap_or(false);
+        let measured_path = self.current_path.clone();
         std::thread::spawn(move || {
             while !wave_sink.is_done() {
                 std::thread::sleep(Duration::from_millis(120));
@@ -622,6 +658,13 @@ impl App {
             wave_sink.for_each_mono(|v| mono.push(v));
             let model = waveform::envelope(&mono, waveform::RESOLUTION, smooth);
             let _ = wave_tx.send(Message::Waveform(model));
+
+            if measure {
+                if let (Some(path), Some(lufs)) = (measured_path, loudness::integrated(&wave_sink))
+                {
+                    let _ = wave_tx.send(Message::Loudness(path, lufs));
+                }
+            }
         });
 
         if self.cfg.show_album_art {
@@ -630,9 +673,9 @@ impl App {
             let cols = self.disk.width();
             let rows = self.disk.height();
             std::thread::spawn(move || {
-                let Some(bytes) = decoder::artwork(&art_source) else {
-                    return;
-                };
+                let bytes = decoder::artwork(&art_source)
+                    .or_else(|| artwork::beside_the_track(&art_source));
+                let Some(bytes) = bytes else { return };
                 if let Some(cells) = artwork::render(&bytes, cols, rows) {
                     let _ = art_tx.send(Message::Artwork(cells));
                 }
@@ -920,6 +963,12 @@ impl App {
             self.remove_from_queue();
         } else if key == bound("HKeyFilterForFolder") {
             self.filter_to_folder();
+        } else if key == Key::ShiftUp {
+            self.move_queue_entry(-1);
+        } else if key == Key::ShiftDown {
+            self.move_queue_entry(1);
+        } else if key == Key::Char('g') {
+            self.filter_to_artist();
         } else if key == bound("HKeyClearFilter") {
             self.clear_filter();
         } else if key == bound("HKeyDownloadStream") {
@@ -949,8 +998,14 @@ impl App {
         let liked = self.stats.toggle_like(&path);
         self.status = format!(
             "{} {}",
-            if liked { self.lang.liked } else { self.lang.unliked },
-            path.file_stem().and_then(|s| s.to_str()).unwrap_or_default()
+            if liked {
+                self.lang.liked
+            } else {
+                self.lang.unliked
+            },
+            path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default()
         );
         if self.view_mode == ViewMode::Liked {
             self.refresh_view();
@@ -996,7 +1051,8 @@ impl App {
     fn move_cursor(&mut self, delta: i32) {
         if self.queue_focus {
             let last = self.queue.len().saturating_sub(1) as i32;
-            self.queue_selected = (self.queue_selected as i32 + delta).clamp(0, last.max(0)) as usize;
+            self.queue_selected =
+                (self.queue_selected as i32 + delta).clamp(0, last.max(0)) as usize;
             self.clamp_queue_scroll();
         } else {
             let last = self.list_len().saturating_sub(1) as i32;
@@ -1017,6 +1073,22 @@ impl App {
         }
     }
 
+    /// Reorders the queue around the highlighted entry.
+    fn move_queue_entry(&mut self, delta: i32) {
+        if !self.queue_focus || self.queue.is_empty() {
+            return;
+        }
+        let from = self.queue_selected;
+        let to = (from as i32 + delta).clamp(0, self.queue.len() as i32 - 1) as usize;
+        if from == to {
+            return;
+        }
+        let item = self.queue.remove(from);
+        self.queue.insert(to, item);
+        self.queue_selected = to;
+        self.clamp_queue_scroll();
+    }
+
     fn remove_from_queue(&mut self) {
         if self.queue_focus && self.queue_selected < self.queue.len() {
             self.queue.remove(self.queue_selected);
@@ -1034,8 +1106,29 @@ impl App {
         }
     }
 
+    /// Everything by whoever made the highlighted track. A library that lives
+    /// in one flat folder has no other way to group itself.
+    fn filter_to_artist(&mut self) {
+        if self.source != ListSource::Local {
+            return;
+        }
+        let Some(track) = self.view.get(self.selected).cloned() else {
+            return;
+        };
+        let artist = self.display_artist(&track);
+        if artist.trim().is_empty() {
+            return;
+        }
+        self.status = artist.clone();
+        self.artist_filter = Some(artist);
+        self.folder_filter = None;
+        self.selected = 0;
+        self.refresh_view();
+    }
+
     fn clear_filter(&mut self) {
         self.folder_filter = None;
+        self.artist_filter = None;
         self.last_local_query.clear();
         self.source = ListSource::Local;
         self.selected = 0;
@@ -1140,7 +1233,8 @@ impl App {
                     && row <= layout.rows_y.1;
                 if over_queue {
                     let max = self.queue.len().saturating_sub(LIST_ROWS) as i32;
-                    self.queue_scroll = (self.queue_scroll as i32 + step).clamp(0, max.max(0)) as usize;
+                    self.queue_scroll =
+                        (self.queue_scroll as i32 + step).clamp(0, max.max(0)) as usize;
                 } else {
                     let max = self.list_len().saturating_sub(LIST_ROWS) as i32;
                     self.scroll = (self.scroll as i32 + step).clamp(0, max.max(0)) as usize;
@@ -1240,6 +1334,12 @@ impl App {
                     self.lyrics = result;
                 }
                 Message::Artwork(cells) => self.artwork = Some(cells),
+                Message::Loudness(path, lufs) => {
+                    self.stats.set_loudness(&path, lufs);
+                    if self.current_path.as_ref() == Some(&path) {
+                        self.apply_track_gain();
+                    }
+                }
                 Message::Waveform(model) => {
                     self.waveform = model;
                     self.waveform_ready = true;
@@ -1275,8 +1375,9 @@ impl App {
             let source = Source::File(track.path);
             self.describe(&source, "");
             if self.cfg.show_album_art {
-                self.artwork = decoder::artwork(&source)
-                    .and_then(|bytes| artwork::render(&bytes, self.disk.width(), self.disk.height()));
+                self.artwork = decoder::artwork(&source).and_then(|bytes| {
+                    artwork::render(&bytes, self.disk.width(), self.disk.height())
+                });
             }
         }
         self.render_frame(width)
@@ -1289,7 +1390,8 @@ impl App {
             Mode::Settings => 2,
             Mode::ColorEdit => 3,
         };
-        let hard = width as i32 != self.last_width || mode_id != self.last_mode || self.force_redraw;
+        let hard =
+            width as i32 != self.last_width || mode_id != self.last_mode || self.force_redraw;
         self.force_redraw = false;
         self.last_width = width as i32;
         self.last_mode = mode_id;

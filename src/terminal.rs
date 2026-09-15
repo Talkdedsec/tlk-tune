@@ -18,6 +18,8 @@ pub enum Key {
     Tab,
     Esc,
     Backspace,
+    ShiftUp,
+    ShiftDown,
     Char(char),
 }
 
@@ -69,11 +71,7 @@ impl Console {
                     MouseEventKind::Down(MouseButton::Left) => Input::Click { col, row },
                     MouseEventKind::Down(MouseButton::Right) => Input::RightClick { col, row },
                     MouseEventKind::Drag(MouseButton::Left) => Input::Drag { col, row },
-                    MouseEventKind::ScrollUp => Input::Scroll {
-                        col,
-                        row,
-                        up: true,
-                    },
+                    MouseEventKind::ScrollUp => Input::Scroll { col, row, up: true },
                     MouseEventKind::ScrollDown => Input::Scroll {
                         col,
                         row,
@@ -123,7 +121,10 @@ fn translate(k: KeyEvent) -> Key {
             _ => Key::None,
         };
     }
+    let shift = k.modifiers.contains(KeyModifiers::SHIFT);
     match k.code {
+        KeyCode::Up if shift => Key::ShiftUp,
+        KeyCode::Down if shift => Key::ShiftDown,
         KeyCode::Up => Key::Up,
         KeyCode::Down => Key::Down,
         KeyCode::Left => Key::Left,

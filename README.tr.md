@@ -23,11 +23,13 @@ tlk-tune
   LRCLIB'den.
 - Sıra, karıştır, tekrarla, klasör filtresi ve aksan tanımayan bulanık arama:
   `oguzhan` yazınca `Oğuzhan`, `dunya` yazınca `Dünya` geliyor.
-- **Albüm kapağı** plağın yerinde, renkli olarak basılır; dosyanın içindeki
-  gömülü kapaktan gelir, kapak yoksa dönen plak kalır.
+- **Albüm kapağı** plağın yerinde, renkli olarak basılır; gömülü kapaktan ya da
+  yanındaki `cover.jpg` dosyasından gelir, kapak yoksa dönen plak kalır.
 - **10 bantlı ekolayzer**, hazır ayarlarla; ok tuşuyla ya da kaydırağa
   tıklayarak.
 - **Boşluksuz** parça geçişi, istenirse 12 saniyeye kadar çapraz geçiş.
+- **Ses eşitleme**, EBU R 128'e göre: her parça bir kez ölçülüp aynı yükseklikte
+  çalınıyor, sert kırpma yerine yumuşak sınırlayıcı var.
 - **Beğeni, çalma sayısı ve görünümler**: `l` beğenir, `v` listeyi tümü /
   beğeniler / en çok çalan / son çalanlar arasında çevirir. tlk-player
   kuruluysa beğeniler ve sayaçlar ilk açılışta kendiliğinden aktarılır.
@@ -76,6 +78,8 @@ cargo build --release
 | Sıralamayı değiştir | `o` |
 | Beğen / beğeniyi kaldır | `l` |
 | Görünümü değiştir | `v` |
+| Sanatçıya göre filtrele | `g` |
+| Sırayı yeniden dizle | `Shift+↑` / `Shift+↓` |
 | Akışı indir | `y` |
 | Ayarlar | `s` |
 | Çıkış | `q` |
@@ -121,6 +125,8 @@ LyricsPlaceholderBall=false
 VisualizerFluidity=10
 LyricsAnimation=word by word
 CrossfadeMs=0
+Normalize=true
+NormalizeTarget=-18.0
 Equalizer=0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
 
 LocalMusicPath=D:\Muzik

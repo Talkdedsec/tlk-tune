@@ -44,7 +44,8 @@ impl Sphere {
         let bass_scale = (bass * 0.9).clamp(0.0, 1.4);
 
         for lat in 1..LAT {
-            let phi = (std::f32::consts::PI * lat as f32) / LAT as f32 - std::f32::consts::FRAC_PI_2;
+            let phi =
+                (std::f32::consts::PI * lat as f32) / LAT as f32 - std::f32::consts::FRAC_PI_2;
             for lon in 0..LON {
                 let theta = (2.0 * std::f32::consts::PI * lon as f32) / LON as f32;
 
