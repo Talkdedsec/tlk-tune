@@ -42,15 +42,21 @@ fn run() {
         Some("--version") => println!("tlk-tune {}", env!("CARGO_PKG_VERSION")),
         Some("--install") => report(install::install()),
         Some("--uninstall") => report(install::uninstall()),
-        Some(path) if !path.starts_with('-') && std::path::Path::new(path).is_file() => {
+        Some(first) if !first.starts_with('-') => {
             let mut app = app::App::new();
-            app.open_on_start(std::path::PathBuf::from(path));
+            if std::path::Path::new(first).is_file() {
+                app.open_on_start(std::path::PathBuf::from(first));
+            } else {
+                // Not a file, so treat the whole line as something to look for.
+                app.search_on_start(&args.join(" "));
+            }
             app.run();
         }
         Some("--help") | Some("-h") => {
             println!("tlk-tune {}", env!("CARGO_PKG_VERSION"));
             println!("  tlk-tune              start the player");
             println!("  tlk-tune <file>       play that file");
+            println!("  tlk-tune <words>      open with that search");
             println!("  tlk-tune --install    put tlk-tune on your PATH");
             println!("  tlk-tune --uninstall  take it back off");
             println!("  tlk-tune --preview N [query]");

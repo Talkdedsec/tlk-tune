@@ -35,10 +35,23 @@ pub fn install() -> Result<String, String> {
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     let exe = dir.join(EXE);
-    // Copying onto a running exe fails, which is exactly what happens when
-    // the installed copy installs itself again.
+    // A leftover from a previous update, now that whatever held it has gone.
+    let stale = dir.join(format!("{EXE}.old"));
+    let _ = std::fs::remove_file(&stale);
+
     if here != exe {
-        std::fs::copy(&here, &exe).map_err(|e| format!("copy: {e}"))?;
+        if let Err(first) = std::fs::copy(&here, &exe) {
+            // Windows refuses to overwrite a running exe but is happy to
+            // rename it out of the way, which is how a program updates itself
+            // while a copy of it is still open somewhere.
+            std::fs::rename(&exe, &stale)
+                .map_err(|_| format!("copy: {first}"))
+                .and_then(|_| {
+                    std::fs::copy(&here, &exe)
+                        .map(|_| ())
+                        .map_err(|e| format!("copy: {e}"))
+                })?;
+        }
     }
 
     // A one line shim so `tune` works as well as `tlk-tune`.
@@ -70,6 +83,7 @@ pub fn uninstall() -> Result<String, String> {
     let associations = remove_file_menu()?;
 
     let _ = std::fs::remove_file(dir.join(SHIM));
+    let _ = std::fs::remove_file(dir.join(format!("{EXE}.old")));
     let exe_gone = std::fs::remove_file(dir.join(EXE)).is_ok();
     let _ = std::fs::remove_dir(&dir);
     broadcast_environment_change();

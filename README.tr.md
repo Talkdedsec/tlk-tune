@@ -184,6 +184,7 @@ sonucu mp3 olarak ilk müzik klasörüne kaydeder.
 tlk-tune --install              PATH'e kurar, iki adla da çalışır
 tlk-tune --uninstall            geri alır
 tlk-tune <dosya>                o dosyayı çalar, klasörünü kitaplığa ekler
+tlk-tune <kelimeler>            kitaplık aranmış hâlde açılır
 tlk-tune --preview 155          155 sütun genişliğinde tek kare basıp çıkar
 tlk-tune --preview 155 oguzhan  aynı kareyi arama uygulanmış hâlde basar
 tlk-tune --version
