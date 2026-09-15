@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn transport_buttons_are_clickable() {
-        let app = App::new();
+        let app = App::headless();
         let l = layout_for(&app, 155);
         assert_eq!(
             probe(&app, l.buttons[0].0 + 2, l.button_y),
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn the_waveform_maps_left_to_right() {
-        let app = App::new();
+        let app = App::headless();
         let l = layout_for(&app, 155);
         assert_eq!(probe(&app, l.wave_x.0, l.wave_y.0), Target::Seek(0));
         match probe(&app, l.wave_x.1, l.wave_y.1) {
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn the_volume_bar_maps_to_percent() {
-        let app = App::new();
+        let app = App::headless();
         let l = layout_for(&app, 155);
         assert_eq!(probe(&app, l.volume_x.1, l.volume_y), Target::Volume(100));
         match probe(&app, l.volume_x.0, l.volume_y) {
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn rows_split_between_list_and_queue() {
-        let app = App::new();
+        let app = App::headless();
         let l = layout_for(&app, 155);
         assert_eq!(probe(&app, 4, l.rows_y.0), Target::ListRow(0));
         assert_eq!(
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn the_sigil_box_opens_settings() {
-        let app = App::new();
+        let app = App::headless();
         let l = layout_for(&app, 155);
         assert_eq!(probe(&app, l.sigil_x.0 + 2, l.search_y), Target::Settings);
         assert_eq!(probe(&app, 10, l.search_y), Target::Search);
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn the_disk_toggles_playback() {
-        let app = App::new();
+        let app = App::headless();
         let l = layout_for(&app, 155);
         assert_eq!(
             probe(&app, l.disk_x.0 + 5, l.panel_y.0 + 5),
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn a_short_window_drops_the_metadata_panel() {
-        let mut app = App::new();
+        let mut app = App::headless();
 
         app.fit_to_height(40);
         assert!(!app.compact);
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn rows_follow_the_fitted_height() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.fit_to_height(31);
         let l = layout_for(&app, 155);
         assert_eq!(l.rows_y.1 - l.rows_y.0 + 1, app.list_rows);
@@ -303,7 +303,7 @@ mod frame_tests {
     /// The point of this one: hit testing and drawing must not drift apart.
     #[test]
     fn targets_land_on_what_was_drawn() {
-        let mut app = App::new();
+        let mut app = App::headless();
         let frame = app.render_frame(155);
         let rows = grid(&frame);
         let layout = layout_for(&app, 155);

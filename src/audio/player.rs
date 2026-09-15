@@ -76,11 +76,25 @@ pub struct Player {
 
 impl Player {
     pub fn new(preferred: Option<String>) -> Player {
-        let output = probe_output(preferred.as_deref()).unwrap_or(Output {
-            sample_rate: 48000,
-            channels: 2,
-            name: String::new(),
-        });
+        Self::build(preferred, true)
+    }
+
+    /// A player that never looks at the sound card. Tests of everything above
+    /// the mixer have no business enumerating audio devices.
+    #[cfg(test)]
+    pub fn silent() -> Player {
+        Self::build(None, false)
+    }
+
+    fn build(preferred: Option<String>, probe: bool) -> Player {
+        let output = probe
+            .then(|| probe_output(preferred.as_deref()))
+            .flatten()
+            .unwrap_or(Output {
+                sample_rate: 48000,
+                channels: 2,
+                name: String::new(),
+            });
         let mix = Arc::new(Mix {
             current: ArcSwapOption::empty(),
             outgoing: ArcSwapOption::empty(),

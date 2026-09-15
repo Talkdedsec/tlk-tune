@@ -1158,7 +1158,7 @@ mod tests {
 
     #[test]
     fn the_paths_tab_lists_folders_and_an_add_row() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.cfg.music_paths = vec!["D:/Music".into(), "D:/Lists/night.m3u".into()];
         app.mode = Mode::Settings;
         app.settings_tab = TAB_PATHS;
@@ -1173,7 +1173,7 @@ mod tests {
 
     #[test]
     fn typing_a_path_adds_it_and_clearing_one_removes_it() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.cfg.music_paths = vec!["D:/Music".into()];
         app.mode = Mode::Settings;
         app.settings_tab = TAB_PATHS;
@@ -1191,7 +1191,7 @@ mod tests {
 
     #[test]
     fn clicking_a_tab_switches_to_it() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.mode = Mode::Settings;
         app.last_width = 155;
         let strip = tab_strip(&app, 155);
@@ -1203,7 +1203,7 @@ mod tests {
 
     #[test]
     fn clicking_a_toggle_flips_it() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.mode = Mode::Settings;
         app.last_width = 155;
         app.settings_tab = TAB_ONOFF;
@@ -1215,7 +1215,7 @@ mod tests {
 
     #[test]
     fn the_colour_grid_maps_clicks_to_the_right_cell() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.mode = Mode::Settings;
         app.last_width = 155;
         app.settings_tab = TAB_COLORS;
@@ -1232,7 +1232,7 @@ mod tests {
 
     #[test]
     fn the_eq_tab_draws_a_slider_per_band() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.mode = Mode::Settings;
         app.settings_tab = TAB_EQ;
         app.cfg.eq = [0.0; 10];
@@ -1248,7 +1248,7 @@ mod tests {
 
     #[test]
     fn clicking_the_slider_sets_that_band() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.mode = Mode::Settings;
         app.last_width = 155;
         app.settings_tab = TAB_EQ;
@@ -1276,7 +1276,7 @@ mod tests {
 
     #[test]
     fn a_preset_fills_the_whole_curve() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.mode = Mode::Settings;
         app.settings_tab = TAB_EQ;
         app.settings_row = 0;
@@ -1320,7 +1320,7 @@ mod tests {
 
     #[test]
     fn the_panel_never_draws_below_the_window() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.mode = Mode::Settings;
         for height in [20, 28, 35] {
             let frame = build(&app, 155, height);

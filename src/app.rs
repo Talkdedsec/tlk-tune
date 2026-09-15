@@ -211,12 +211,25 @@ pub struct App {
 
 impl App {
     pub fn new() -> App {
+        Self::build(true)
+    }
+
+    /// Everything but the sound card and the global hotkeys, so a test can
+    /// exercise the interface without touching the machine it runs on.
+    #[cfg(test)]
+    pub fn headless() -> App {
+        Self::build(false)
+    }
+
+    fn build(with_audio: bool) -> App {
         let cfg = config::load();
         let restored = session::load();
         let lang = cfg.language.strings();
         let (tx, rx) = channel();
         let (media_tx, media_rx) = channel();
-        mediakeys::listen(media_tx);
+        if with_audio {
+            mediakeys::listen(media_tx);
+        }
 
         let mut stats = Stats::load();
         let imported = if stats.liked_count() == 0 && stats.plays.is_empty() {
@@ -225,6 +238,13 @@ impl App {
             None
         };
 
+        #[cfg(test)]
+        let mut player = if with_audio {
+            Player::new(cfg.output_device.clone())
+        } else {
+            Player::silent()
+        };
+        #[cfg(not(test))]
         let mut player = Player::new(cfg.output_device.clone());
         player.set_crossfade_ms(cfg.crossfade_ms);
         player.set_eq(cfg.eq);
