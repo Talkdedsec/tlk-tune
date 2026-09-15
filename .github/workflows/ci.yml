@@ -34,6 +34,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
+      - name: Pull this version out of the changelog
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}" -replace '^v', ''
+          $lines = Get-Content CHANGELOG.md
+          $start = ($lines | Select-String -Pattern "^## \[$([regex]::Escape($tag))\]" | Select-Object -First 1).LineNumber
+          if (-not $start) { "Release $tag." | Set-Content notes.md; exit 0 }
+          $rest = $lines[$start..($lines.Count - 1)]
+          $end = ($rest | Select-String -Pattern '^## \[' | Select-Object -First 1).LineNumber
+          if ($end) { $rest = $rest[0..($end - 2)] }
+          $rest | Where-Object { $_ -notmatch '^\[[^\]]+\]: ' } | Set-Content notes.md -Encoding utf8
       - uses: softprops/action-gh-release@v2
         with:
+          name: tlk-tune ${{ github.ref_name }}
+          body_path: notes.md
           files: target/release/tlk-tune.exe
