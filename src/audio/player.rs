@@ -21,15 +21,28 @@ pub struct Output {
 struct Deck {
     pcm: Arc<PcmStream>,
     cursor: AtomicI64,
+    /// Replay gain for this track alone. Holding it here rather than on the
+    /// mix is what keeps a crossfade honest: the outgoing track keeps its own
+    /// level while the incoming one arrives at its.
+    gain: AtomicU32,
 }
 
 impl Deck {
-    fn new(pcm: Arc<PcmStream>, start_frame: i64) -> Deck {
+    fn new(pcm: Arc<PcmStream>, start_frame: i64, gain_db: f32) -> Deck {
         Deck {
             pcm,
             cursor: AtomicI64::new(start_frame),
+            gain: AtomicU32::new(linear(gain_db).to_bits()),
         }
     }
+
+    fn gain(&self) -> f32 {
+        f32::from_bits(self.gain.load(Ordering::Relaxed))
+    }
+}
+
+fn linear(db: f32) -> f32 {
+    10f32.powf(db.clamp(-15.0, 15.0) / 20.0)
 }
 
 struct Mix {
@@ -39,7 +52,6 @@ struct Mix {
     fade_left: AtomicUsize,
     curve: ArcSwap<eq::Curve>,
     gain: AtomicU32,
-    track_gain: AtomicU32,
     paused: AtomicBool,
     finished: AtomicBool,
     lost: AtomicBool,
@@ -49,7 +61,6 @@ struct Mix {
 impl Mix {
     fn gain(&self) -> f32 {
         f32::from_bits(self.gain.load(Ordering::Relaxed))
-            * f32::from_bits(self.track_gain.load(Ordering::Relaxed))
     }
 }
 
@@ -77,7 +88,6 @@ impl Player {
             fade_left: AtomicUsize::new(0),
             curve: ArcSwap::from_pointee(eq::build(&[0.0; 10], output.sample_rate)),
             gain: AtomicU32::new(0.7f32.to_bits()),
-            track_gain: AtomicU32::new(1.0f32.to_bits()),
             paused: AtomicBool::new(false),
             finished: AtomicBool::new(false),
             lost: AtomicBool::new(false),
@@ -165,9 +175,10 @@ impl Player {
         pcm: Arc<PcmStream>,
         start_sec: f64,
         sink: Option<SpectrumSink>,
+        gain_db: f32,
     ) -> bool {
         let rate = pcm.sample_rate;
-        let deck = Arc::new(Deck::new(pcm, (start_sec * rate as f64) as i64));
+        let deck = Arc::new(Deck::new(pcm, (start_sec * rate as f64) as i64, gain_db));
 
         match sink {
             Some(s) => self.mix.sink.store(Some(Arc::new(s))),
@@ -276,13 +287,12 @@ impl Player {
         self.mix.gain.store(gain.to_bits(), Ordering::Relaxed);
     }
 
-    /// Per-track replay gain, in dB. Reset to zero whenever a track starts
-    /// so a measured one never leaks its correction onto the next.
+    /// Corrects the track that is playing, for when its measurement arrives
+    /// after it started.
     pub fn set_track_gain_db(&self, db: f32) {
-        let linear = 10f32.powf(db.clamp(-15.0, 15.0) / 20.0);
-        self.mix
-            .track_gain
-            .store(linear.to_bits(), Ordering::Relaxed);
+        if let Some(deck) = self.mix.current.load_full() {
+            deck.gain.store(linear(db).to_bits(), Ordering::Relaxed);
+        }
     }
 
     pub fn set_crossfade_ms(&mut self, ms: u32) {
@@ -321,8 +331,9 @@ fn render(mix: &Mix, out: &mut [f32], channels: usize, rate: u32, states: &mut [
         let taken = frames.min(fade_left);
         let cursor = deck.cursor.load(Ordering::Relaxed).max(0) as usize;
         let available = deck.pcm.available_samples();
+        let deck_gain = deck.gain();
         for f in 0..taken {
-            let level = (fade_left - f) as f32 / fade_total as f32;
+            let level = (fade_left - f) as f32 / fade_total as f32 * deck_gain;
             let base = (cursor + f) * channels;
             for c in 0..channels {
                 out[f * channels + c] += deck.pcm.at(base + c, available) * level;
@@ -345,12 +356,14 @@ fn render(mix: &Mix, out: &mut [f32], channels: usize, rate: u32, states: &mut [
             let cursor = cursor as usize;
             let fading = fade_total > 0 && fade_left > 0;
             let available = deck.pcm.available_samples();
+            let deck_gain = deck.gain();
             for f in 0..frames {
-                let ramp = if fading {
-                    1.0 - fade_left.saturating_sub(f) as f32 / fade_total as f32
-                } else {
-                    1.0
-                };
+                let ramp = deck_gain
+                    * if fading {
+                        1.0 - fade_left.saturating_sub(f) as f32 / fade_total as f32
+                    } else {
+                        1.0
+                    };
                 let base = (cursor + f) * channels;
                 for c in 0..channels {
                     out[f * channels + c] += deck.pcm.at(base + c, available) * ramp;
@@ -443,7 +456,10 @@ mod tests {
         pcm.mark_done();
 
         player.set_volume(10);
-        assert!(player.play(Arc::clone(&pcm), 0.0, None), "device refused");
+        assert!(
+            player.play(Arc::clone(&pcm), 0.0, None, 0.0),
+            "device refused"
+        );
         std::thread::sleep(Duration::from_millis(400));
         let elapsed = player.elapsed();
         assert!(elapsed > 0.1, "cursor stalled at {elapsed}");
@@ -473,15 +489,14 @@ mod tests {
             fade_left: AtomicUsize::new(0),
             curve: ArcSwap::from_pointee(eq::build(&[0.0; 10], rate)),
             gain: AtomicU32::new(1.0f32.to_bits()),
-            track_gain: AtomicU32::new(1.0f32.to_bits()),
             paused: AtomicBool::new(false),
             finished: AtomicBool::new(false),
             lost: AtomicBool::new(false),
             sink: ArcSwapOption::empty(),
         });
 
-        let old = Arc::new(Deck::new(deck(rate, channels, 0.8, 1.0), 0));
-        let new = Arc::new(Deck::new(deck(rate, channels, -0.8, 1.0), 0));
+        let old = Arc::new(Deck::new(deck(rate, channels, 0.8, 1.0), 0, 0.0));
+        let new = Arc::new(Deck::new(deck(rate, channels, -0.8, 1.0), 0, 0.0));
         let fade = 4800usize;
         mix.outgoing.store(Some(old));
         mix.current.store(Some(new));
@@ -511,13 +526,16 @@ mod tests {
     fn a_paused_mix_is_silent() {
         let rate = 48000u32;
         let mix = Arc::new(Mix {
-            current: ArcSwapOption::from(Some(Arc::new(Deck::new(deck(rate, 2, 0.9, 0.5), 0)))),
+            current: ArcSwapOption::from(Some(Arc::new(Deck::new(
+                deck(rate, 2, 0.9, 0.5),
+                0,
+                0.0,
+            )))),
             outgoing: ArcSwapOption::empty(),
             fade_total: AtomicUsize::new(0),
             fade_left: AtomicUsize::new(0),
             curve: ArcSwap::from_pointee(eq::build(&[0.0; 10], rate)),
             gain: AtomicU32::new(1.0f32.to_bits()),
-            track_gain: AtomicU32::new(1.0f32.to_bits()),
             paused: AtomicBool::new(true),
             finished: AtomicBool::new(false),
             lost: AtomicBool::new(false),
@@ -527,5 +545,45 @@ mod tests {
         let mut out = vec![9.0f32; 256];
         render(&mix, &mut out, 2, rate, &mut states);
         assert!(out.iter().all(|s| *s == 0.0));
+    }
+
+    #[test]
+    fn each_deck_keeps_its_own_replay_gain_through_a_fade() {
+        let rate = 48000u32;
+        let channels = 2usize;
+        let mix = Arc::new(Mix {
+            current: ArcSwapOption::empty(),
+            outgoing: ArcSwapOption::empty(),
+            fade_total: AtomicUsize::new(0),
+            fade_left: AtomicUsize::new(0),
+            curve: ArcSwap::from_pointee(eq::build(&[0.0; 10], rate)),
+            gain: AtomicU32::new(1.0f32.to_bits()),
+            paused: AtomicBool::new(false),
+            finished: AtomicBool::new(false),
+            lost: AtomicBool::new(false),
+            sink: ArcSwapOption::empty(),
+        });
+
+        // The outgoing track is turned down 6 dB, the incoming one left alone.
+        let quiet = Arc::new(Deck::new(deck(rate, channels, 0.5, 1.0), 0, -6.0));
+        let plain = Arc::new(Deck::new(deck(rate, channels, 0.0, 1.0), 0, 0.0));
+        let fade = 48000usize;
+        mix.outgoing.store(Some(quiet));
+        mix.current.store(Some(plain));
+        mix.fade_total.store(fade, Ordering::Relaxed);
+        mix.fade_left.store(fade, Ordering::Relaxed);
+
+        let mut states = vec![[eq::State::default(); 10]; channels];
+        let mut out = vec![0.0f32; 64 * channels];
+        render(&mix, &mut out, channels, rate, &mut states);
+
+        // Right at the start the fade is still full, so what is heard is the
+        // outgoing deck at its own level: 0.5 turned down by 6 dB.
+        let expected = 0.5 * 10f32.powf(-6.0 / 20.0);
+        assert!(
+            (out[0] - expected).abs() < 0.01,
+            "heard {} instead of {expected}",
+            out[0]
+        );
     }
 }

@@ -643,24 +643,21 @@ impl App {
         self.play_counted = false;
         self.crossfade_started = false;
         self.spectrum.reset();
-        self.apply_track_gain();
         info
     }
 
-    /// Replay gain for the track that is starting. A file measured on an
-    /// earlier run is corrected from the first sample; a new one gets its
-    /// correction once the analysis thread reports back.
-    fn apply_track_gain(&self) {
+    /// The correction this track needs, in dB. Zero until it has been
+    /// measured; the analysis thread fills it in afterwards.
+    fn track_gain_db(&self) -> f32 {
         let measured = self
             .current_path
             .as_ref()
             .filter(|_| self.cfg.normalize)
             .and_then(|p| self.stats.loudness(p));
-        let db = match measured {
+        match measured {
             Some(lufs) => loudness::gain_db(lufs, self.cfg.normalize_target),
             None => 0.0,
-        };
-        self.player.set_track_gain_db(db);
+        }
     }
 
     pub fn start(&mut self, source: Source, fallback_title: &str, known: Option<TrackInfo>) {
@@ -733,7 +730,8 @@ impl App {
         }
 
         let sink = self.spectrum.sink();
-        self.player.play(Arc::clone(&pcm), 0.0, Some(sink));
+        let gain_db = self.track_gain_db();
+        self.player.play(Arc::clone(&pcm), 0.0, Some(sink), gain_db);
 
         let track_path = match &source {
             Source::File(path) => Some(path.clone()),
@@ -1491,7 +1489,7 @@ impl App {
                 Message::Loudness(path, lufs) => {
                     self.stats.set_loudness(&path, lufs);
                     if self.current_path.as_ref() == Some(&path) {
-                        self.apply_track_gain();
+                        self.player.set_track_gain_db(self.track_gain_db());
                     }
                 }
                 Message::Waveform(model) => {
