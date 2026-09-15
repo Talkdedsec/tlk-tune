@@ -57,7 +57,17 @@ cd tlk-tune
 cargo build --release
 ```
 
-Çıktı: `target/release/tlk-tune.exe`. PATH'te bir yere kopyala.
+Çıktı: `target/release/tlk-tune.exe`. Sonra:
+
+```
+target\release\tlk-tune.exe --install
+```
+
+Exe'yi `%LOCALAPPDATA%\Programs\tlk-tune` altına kopyalar, o klasörü kullanıcı
+PATH'ine ekler, yanına `tune.cmd` koyar (iki adla da açılır) ve ses
+dosyalarının sağ tık menüsüne "Play with tlk-tune" girdisi ekler. Yönetici
+gerekmez, `--uninstall` hepsini geri alır. Yeni bir terminal aç, `tlk-tune`
+yazman yeterli.
 
 İsteğe bağlı: çevrimiçi arama, akış ve indirme için
 [yt-dlp](https://github.com/yt-dlp/yt-dlp).
@@ -171,6 +181,8 @@ sonucu mp3 olarak ilk müzik klasörüne kaydeder.
 ## Diğer bayraklar
 
 ```
+tlk-tune --install              PATH'e kurar, iki adla da çalışır
+tlk-tune --uninstall            geri alır
 tlk-tune <dosya>                o dosyayı çalar, klasörünü kitaplığa ekler
 tlk-tune --preview 155          155 sütun genişliğinde tek kare basıp çıkar
 tlk-tune --preview 155 oguzhan  aynı kareyi arama uygulanmış hâlde basar

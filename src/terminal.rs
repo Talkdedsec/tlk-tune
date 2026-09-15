@@ -39,6 +39,26 @@ pub struct Console {
 }
 
 impl Console {
+    /// True when stdout really is a console. Started with its output piped to
+    /// a file the player would happily draw frames into it forever, so the
+    /// caller refuses instead.
+    pub fn available() -> bool {
+        #[cfg(windows)]
+        {
+            extern "system" {
+                fn GetStdHandle(which: u32) -> isize;
+                fn GetConsoleMode(handle: isize, mode: *mut u32) -> i32;
+            }
+            const STD_OUTPUT_HANDLE: u32 = -11i32 as u32;
+            let mut mode = 0u32;
+            unsafe { GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mut mode) != 0 }
+        }
+        #[cfg(not(windows))]
+        {
+            true
+        }
+    }
+
     pub fn open() -> io::Result<Console> {
         #[cfg(windows)]
         use_utf8_codepage();
