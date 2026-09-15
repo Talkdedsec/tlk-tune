@@ -72,7 +72,9 @@ And it folds down when the window is narrow:
 
 ## Install
 
-Needs a Rust toolchain.
+Download `tlk-tune.exe` from the
+[latest release](https://github.com/Talkdedsec/tlk-tune/releases/latest), or
+build it yourself with a Rust toolchain:
 
 ```
 git clone https://github.com/Talkdedsec/tlk-tune.git
@@ -80,10 +82,11 @@ cd tlk-tune
 cargo build --release
 ```
 
-The binary lands at `target/release/tlk-tune.exe`. Then:
+Either way it is one executable and it runs from wherever it sits. To put it
+on your PATH:
 
 ```
-target\release\tlk-tune.exe --install
+tlk-tune.exe --install
 ```
 
 That copies it to `%LOCALAPPDATA%\Programs\tlk-tune`, puts that folder on your
