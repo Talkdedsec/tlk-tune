@@ -66,6 +66,12 @@ pub struct Strings {
     pub settings_saved: &'static str,
     pub queued: &'static str,
 
+    pub view_all: &'static str,
+    pub view_liked: &'static str,
+    pub view_played: &'static str,
+    pub view_recent: &'static str,
+    pub liked: &'static str,
+    pub unliked: &'static str,
     pub sort_name: &'static str,
     pub sort_artist: &'static str,
     pub sort_folder: &'static str,
@@ -74,6 +80,7 @@ pub struct Strings {
     pub tab_colors: &'static str,
     pub tab_onoff: &'static str,
     pub tab_animation: &'static str,
+    pub tab_eq: &'static str,
     pub tab_paths: &'static str,
     pub tab_reference: &'static str,
     pub tab_about: &'static str,
@@ -83,6 +90,8 @@ pub struct Strings {
     pub paths_add: &'static str,
     pub paths_missing: &'static str,
     pub device_default: &'static str,
+    pub eq_preset: &'static str,
+    pub eq_hint: &'static str,
 
     pub grp_border: &'static str,
     pub grp_disk: &'static str,
@@ -114,8 +123,8 @@ pub struct Strings {
     pub preview_lyric_b: &'static str,
     pub preview_lyric_c: &'static str,
 
-    pub onoff_rows: [&'static str; 7],
-    pub anim_rows: [&'static str; 10],
+    pub onoff_rows: [&'static str; 8],
+    pub anim_rows: [&'static str; 11],
     pub ref_rows: [&'static str; 11],
 }
 
@@ -158,6 +167,12 @@ pub static EN: Strings = Strings {
     settings_saved: "settings saved",
     queued: "queued",
 
+    view_all: "all",
+    view_liked: "liked",
+    view_played: "played",
+    view_recent: "recent",
+    liked: "liked",
+    unliked: "unliked",
     sort_name: "name",
     sort_artist: "artist",
     sort_folder: "folder",
@@ -166,6 +181,7 @@ pub static EN: Strings = Strings {
     tab_colors: "COLORS",
     tab_onoff: "ON/OFF",
     tab_animation: "ANIMATION",
+    tab_eq: "EQ",
     tab_paths: "PATHS",
     tab_reference: "REFERENCE",
     tab_about: "ABOUT APP",
@@ -175,6 +191,8 @@ pub static EN: Strings = Strings {
     paths_add: "+ add a folder or a playlist",
     paths_missing: "not found",
     device_default: "system default",
+    eq_preset: "Preset",
+    eq_hint: "[\u{2191}\u{2193}] Band | [\u{2190}\u{2192}] Gain | click the slider | [0] Flat | [S] Save | [Q] Back",
 
     grp_border: "BORDER_COLOR",
     grp_disk: "DISK",
@@ -208,6 +226,7 @@ pub static EN: Strings = Strings {
 
     onoff_rows: [
         "Eliment Disk",
+        "Album Art",
         "Dummy Buttons",
         "Queue Display",
         "WaveForm",
@@ -226,6 +245,7 @@ pub static EN: Strings = Strings {
         "Lyrics Animation",
         "Language",
         "Output Device",
+        "Crossfade",
     ],
     ref_rows: [
         "Open Settings",
@@ -281,6 +301,12 @@ pub static TR: Strings = Strings {
     settings_saved: "ayarlar kaydedildi",
     queued: "siraya eklendi",
 
+    view_all: "tumu",
+    view_liked: "begeniler",
+    view_played: "en cok calan",
+    view_recent: "son calanlar",
+    liked: "begenildi",
+    unliked: "begeni kaldirildi",
     sort_name: "ad",
     sort_artist: "sanatci",
     sort_folder: "klasor",
@@ -289,6 +315,7 @@ pub static TR: Strings = Strings {
     tab_colors: "RENKLER",
     tab_onoff: "ACIK/KAPALI",
     tab_animation: "ANIMASYON",
+    tab_eq: "EQ",
     tab_paths: "KLASORLER",
     tab_reference: "KISAYOLLAR",
     tab_about: "HAKKINDA",
@@ -298,6 +325,8 @@ pub static TR: Strings = Strings {
     paths_add: "+ klasor veya calma listesi ekle",
     paths_missing: "bulunamadi",
     device_default: "sistem varsayilani",
+    eq_preset: "Hazir ayar",
+    eq_hint: "[\u{2191}\u{2193}] Bant | [\u{2190}\u{2192}] Kazanc | kaydiraca tikla | [0] Duz | [S] Kaydet | [Q] Geri",
 
     grp_border: "KENARLIK",
     grp_disk: "DISK",
@@ -331,6 +360,7 @@ pub static TR: Strings = Strings {
 
     onoff_rows: [
         "Disk",
+        "Albüm Kapagi",
         "Sahte Dugmeler",
         "Sira Paneli",
         "Dalga Formu",
@@ -349,6 +379,7 @@ pub static TR: Strings = Strings {
         "Soz Animasyonu",
         "Dil",
         "Ses Cikisi",
+        "Capraz Gecis",
     ],
     ref_rows: [
         "Ayarlari Ac",

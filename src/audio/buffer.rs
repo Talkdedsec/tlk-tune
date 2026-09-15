@@ -72,21 +72,18 @@ impl PcmStream {
         self.available.load(Ordering::Acquire) / self.channels
     }
 
-    /// Copies `out.len()` samples starting at `frame`, zero-filling anything
-    /// the decoder has not produced yet.
-    pub fn read_into(&self, frame: usize, out: &mut [f32], gain: f32) {
-        let available = self.available.load(Ordering::Acquire);
-        let start = frame * self.channels;
-        let data = unsafe { &*self.data.get() };
-        let scale = gain / SCALE;
-        for (i, slot) in out.iter_mut().enumerate() {
-            let idx = start + i;
-            *slot = if idx < available {
-                data[idx] as f32 * scale
-            } else {
-                0.0
-            };
+    pub fn available_samples(&self) -> usize {
+        self.available.load(Ordering::Acquire)
+    }
+
+    /// One sample, with the published count passed in so the audio callback
+    /// loads the atomic once per buffer rather than once per sample.
+    #[inline]
+    pub fn at(&self, index: usize, available: usize) -> f32 {
+        if index >= available {
+            return 0.0;
         }
+        unsafe { (*self.data.get())[index] as f32 / SCALE }
     }
 
     /// Feeds the waveform pass one mono sample per frame without ever
@@ -127,21 +124,20 @@ mod tests {
     fn round_trips_through_i16() {
         let pcm = PcmStream::with_seconds(1.0, 8000, 2);
         pcm.append(&[1.0, -1.0, 0.5, -0.5]);
-        let mut out = [0.0f32; 4];
-        pcm.read_into(0, &mut out, 1.0);
-        assert!((out[0] - 1.0).abs() < 0.001);
-        assert!((out[1] + 1.0).abs() < 0.001);
-        assert!((out[2] - 0.5).abs() < 0.001);
-        assert!((out[3] + 0.5).abs() < 0.001);
+        let available = pcm.available_samples();
+        assert!((pcm.at(0, available) - 1.0).abs() < 0.001);
+        assert!((pcm.at(1, available) + 1.0).abs() < 0.001);
+        assert!((pcm.at(2, available) - 0.5).abs() < 0.001);
+        assert!((pcm.at(3, available) + 0.5).abs() < 0.001);
     }
 
     #[test]
     fn reads_past_the_end_as_silence() {
         let pcm = PcmStream::with_seconds(1.0, 8000, 2);
         pcm.append(&[0.5, 0.5]);
-        let mut out = [9.0f32; 6];
-        pcm.read_into(0, &mut out, 1.0);
-        assert!(out[2..].iter().all(|s| *s == 0.0));
+        let available = pcm.available_samples();
+        assert_eq!(pcm.at(2, available), 0.0);
+        assert_eq!(pcm.at(99, available), 0.0);
     }
 
     #[test]

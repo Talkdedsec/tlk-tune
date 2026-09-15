@@ -121,6 +121,27 @@ pub fn probe_source(source: &Source) -> Option<TrackInfo> {
     Some(info)
 }
 
+/// The largest embedded cover in the file, if it has one.
+pub fn artwork(source: &Source) -> Option<Vec<u8>> {
+    let mut probed = source.open()?;
+    let mut best: Option<Vec<u8>> = None;
+    let mut take = |revision: &symphonia::core::meta::MetadataRevision| {
+        for visual in revision.visuals() {
+            let bigger = best.as_ref().map(|b| visual.data.len() > b.len());
+            if bigger.unwrap_or(true) {
+                best = Some(visual.data.to_vec());
+            }
+        }
+    };
+    if let Some(meta) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
+        take(meta);
+    }
+    if let Some(meta) = probed.format.metadata().current() {
+        take(meta);
+    }
+    best
+}
+
 /// Decodes everything into `sink`, converting to the sink's channel count and
 /// sample rate as it goes. Runs on its own thread; playback reads the buffer
 /// while it is still filling.
@@ -350,10 +371,10 @@ mod tests {
         write_sine_wav(&path, 48000, 1, 0.3);
         let sink = Arc::new(PcmStream::with_seconds(0.3, 48000, 2));
         decode_into(Source::File(path), Arc::clone(&sink));
-        let mut out = vec![0.0f32; 1000];
-        sink.read_into(0, &mut out, 1.0);
-        for pair in out.chunks(2) {
-            assert_eq!(pair[0], pair[1]);
+        let available = sink.available_samples();
+        assert!(available > 1000);
+        for frame in 0..500 {
+            assert_eq!(sink.at(frame * 2, available), sink.at(frame * 2 + 1, available));
         }
     }
 

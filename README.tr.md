@@ -23,6 +23,16 @@ tlk-tune
   LRCLIB'den.
 - Sıra, karıştır, tekrarla, klasör filtresi ve aksan tanımayan bulanık arama:
   `oguzhan` yazınca `Oğuzhan`, `dunya` yazınca `Dünya` geliyor.
+- **Albüm kapağı** plağın yerinde, renkli olarak basılır; dosyanın içindeki
+  gömülü kapaktan gelir, kapak yoksa dönen plak kalır.
+- **10 bantlı ekolayzer**, hazır ayarlarla; ok tuşuyla ya da kaydırağa
+  tıklayarak.
+- **Boşluksuz** parça geçişi, istenirse 12 saniyeye kadar çapraz geçiş.
+- **Beğeni, çalma sayısı ve görünümler**: `l` beğenir, `v` listeyi tümü /
+  beğeniler / en çok çalan / son çalanlar arasında çevirir. tlk-player
+  kuruluysa beğeniler ve sayaçlar ilk açılışta kendiliğinden aktarılır.
+- Başlıklar etiketlerden gelir; `001 - Sanatçı - Başlık.mp3` dolu bir klasör
+  dosya adı yerine gerçek başlıklarla okunur.
 - `yt-dlp` PATH'teyse çevrimiçi arama ve akış; olmasa da geri kalanı çalışır.
 - Türkçe ve İngilizce arayüz.
 - Uygulama içi ayar ekranı: her renk, anahtar, animasyon, müzik klasörü, ses
@@ -64,6 +74,8 @@ cargo build --release
 | Klasöre göre filtrele | `f` |
 | Filtreyi temizle | `c` |
 | Sıralamayı değiştir | `o` |
+| Beğen / beğeniyi kaldır | `l` |
+| Görünümü değiştir | `v` |
 | Akışı indir | `y` |
 | Ayarlar | `s` |
 | Çıkış | `q` |
@@ -108,6 +120,8 @@ LyricsPlaceholderBall=false
 
 VisualizerFluidity=10
 LyricsAnimation=word by word
+CrossfadeMs=0
+Equalizer=0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
 
 LocalMusicPath=D:\Muzik
 LocalMusicPath=%USERPROFILE%\Music

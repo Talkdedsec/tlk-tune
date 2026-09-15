@@ -1,4 +1,5 @@
 use crate::app::{App, Mode};
+use crate::audio::eq;
 use crate::config::{self, Config, LANGUAGES, LYRIC_ALIGNMENTS, LYRIC_ANIMATIONS, PLAY_MODES};
 use crate::lang::Language;
 use crate::terminal::{Input, Key};
@@ -9,16 +10,20 @@ const INVERT: &str = "\x1b[7m";
 const EDITING: &str = "\x1b[41;37m";
 const COLOUR_ROWS: usize = 14;
 const HOTKEY_ROWS: usize = 11;
-const ANIM_ROWS: usize = 10;
-const ONOFF_ROWS: usize = 7;
+const ANIM_ROWS: usize = 11;
+const ONOFF_ROWS: usize = 8;
 const PATH_FIELD: usize = 60;
+const EQ_ROWS: usize = eq::BANDS.len() + 1;
+const SLIDER_X: usize = 34;
+const SLIDER_W: usize = 25;
 
 pub const TAB_COLORS: i32 = 0;
 pub const TAB_ONOFF: i32 = 1;
 pub const TAB_ANIMATION: i32 = 2;
-pub const TAB_PATHS: i32 = 3;
-pub const TAB_REFERENCE: i32 = 4;
-const TAB_COUNT: i32 = 6;
+pub const TAB_EQ: i32 = 3;
+pub const TAB_PATHS: i32 = 4;
+pub const TAB_REFERENCE: i32 = 5;
+const TAB_COUNT: i32 = 7;
 
 const HOTKEY_ACTIONS: [&str; HOTKEY_ROWS] = [
     "HKeySetting",
@@ -79,11 +84,12 @@ fn colour_value(cfg: &Config, row: usize, col: usize) -> String {
 fn toggle_value(cfg: &Config, row: usize) -> bool {
     match row {
         0 => cfg.show_disk,
-        1 => cfg.show_buttons,
-        2 => cfg.show_queue,
-        3 => cfg.show_waveform,
-        4 => cfg.show_lyrics,
-        5 => cfg.show_lyric_ball,
+        1 => cfg.show_album_art,
+        2 => cfg.show_buttons,
+        3 => cfg.show_queue,
+        4 => cfg.show_waveform,
+        5 => cfg.show_lyrics,
+        6 => cfg.show_lyric_ball,
         _ => cfg.show_visualizer,
     }
 }
@@ -91,11 +97,12 @@ fn toggle_value(cfg: &Config, row: usize) -> bool {
 fn set_toggle(cfg: &mut Config, row: usize, value: bool) {
     match row {
         0 => cfg.show_disk = value,
-        1 => cfg.show_buttons = value,
-        2 => cfg.show_queue = value,
-        3 => cfg.show_waveform = value,
-        4 => cfg.show_lyrics = value,
-        5 => cfg.show_lyric_ball = value,
+        1 => cfg.show_album_art = value,
+        2 => cfg.show_buttons = value,
+        3 => cfg.show_queue = value,
+        4 => cfg.show_waveform = value,
+        5 => cfg.show_lyrics = value,
+        6 => cfg.show_lyric_ball = value,
         _ => cfg.show_visualizer = value,
     }
 }
@@ -112,12 +119,84 @@ fn animation_value(app: &App, row: usize) -> String {
         6 => LYRIC_ALIGNMENTS[cfg.lyric_alignment.clamp(0, 2) as usize].to_string(),
         7 => LYRIC_ANIMATIONS[cfg.lyric_animation.clamp(0, 4) as usize].to_string(),
         8 => cfg.language.code().to_string(),
-        _ => match &cfg.output_device {
+        9 => match &cfg.output_device {
             Some(name) => name.clone(),
             None if app.player.output().name.is_empty() => app.lang.device_default.to_string(),
             None => app.player.output().name.clone(),
         },
+        _ => {
+            if cfg.crossfade_ms == 0 {
+                "gapless".to_string()
+            } else {
+                format!("{:.1} s", cfg.crossfade_ms as f32 / 1000.0)
+            }
+        }
     }
+}
+
+/// A centre-zero slider, so the whole curve is readable at a glance.
+fn slider(gain: f32) -> String {
+    let middle = SLIDER_W / 2;
+    let span = (gain / eq::MAX_GAIN * middle as f32).round() as i32;
+    let mut out = String::with_capacity(SLIDER_W * 3);
+    for i in 0..SLIDER_W {
+        let offset = i as i32 - middle as i32;
+        let filled = if span >= 0 {
+            offset > 0 && offset <= span
+        } else {
+            offset < 0 && offset >= span
+        };
+        if i == middle {
+            out.push('\u{253c}');
+        } else if filled {
+            out.push('\u{2588}');
+        } else {
+            out.push('\u{2500}');
+        }
+    }
+    out
+}
+
+fn eq_label(row: usize) -> String {
+    let hz = eq::BANDS[row];
+    if hz >= 1000.0 {
+        format!("{:.0} kHz", hz / 1000.0)
+    } else {
+        format!("{:.0} Hz", hz)
+    }
+}
+
+fn preset_name(app: &App) -> String {
+    eq::PRESETS
+        .iter()
+        .find(|(_, gains)| {
+            gains
+                .iter()
+                .zip(app.cfg.eq.iter())
+                .all(|(a, b)| (a - b).abs() < 0.05)
+        })
+        .map(|(name, _)| name.to_string())
+        .unwrap_or_else(|| "custom".to_string())
+}
+
+fn set_eq(app: &mut App, gains: [f32; 10]) {
+    app.cfg.eq = gains;
+    app.player.set_eq(gains);
+}
+
+fn cycle_preset(app: &mut App, direction: i32) {
+    let current = eq::PRESETS
+        .iter()
+        .position(|(name, _)| *name == preset_name(app))
+        .unwrap_or(0) as i32;
+    let next = (current + direction).rem_euclid(eq::PRESETS.len() as i32) as usize;
+    set_eq(app, eq::PRESETS[next].1);
+}
+
+fn nudge_band(app: &mut App, band: usize, delta: f32) {
+    let mut gains = app.cfg.eq;
+    gains[band] = (gains[band] + delta).clamp(-eq::MAX_GAIN, eq::MAX_GAIN);
+    set_eq(app, gains);
 }
 
 fn row_value(app: &App, tab: i32, row: usize, col: usize) -> String {
@@ -143,6 +222,7 @@ pub fn max_row(app: &App) -> usize {
         TAB_COLORS => COLOUR_ROWS,
         TAB_ONOFF => ONOFF_ROWS,
         TAB_ANIMATION => ANIM_ROWS,
+        TAB_EQ => EQ_ROWS,
         TAB_PATHS => app.music_path_rows().len() + 1,
         TAB_REFERENCE => HOTKEY_ROWS + app.cfg.font.len(),
         _ => app.cfg.about.len().max(1),
@@ -194,8 +274,20 @@ fn cycle(app: &mut App, direction: i32) {
                 let next = (current + direction).rem_euclid(LANGUAGES.len() as i32) as usize;
                 app.apply_language(Language::from_config(LANGUAGES[next]));
             }
-            _ => cycle_device(app, direction),
+            9 => cycle_device(app, direction),
+            _ => {
+                let next = app.cfg.crossfade_ms as i32 + direction * 250;
+                app.cfg.crossfade_ms = next.clamp(0, 12_000) as u32;
+                app.player.set_crossfade_ms(app.cfg.crossfade_ms);
+            }
         },
+        TAB_EQ => {
+            if row == 0 {
+                cycle_preset(app, direction);
+            } else {
+                nudge_band(app, row - 1, direction as f32 * 0.5);
+            }
+        }
         _ => {}
     }
 }
@@ -345,6 +437,7 @@ pub fn handle_key(app: &mut App, key: Key) {
             app.edit_buffer.clear();
             app.mode = Mode::ColorEdit;
         }
+        Key::Char('0') if app.settings_tab == TAB_EQ => set_eq(app, [0.0; 10]),
         Key::Char('d') | Key::Char('D') if app.settings_tab == TAB_PATHS => remove_path(app),
         Key::Char('r') | Key::Char('R') if app.settings_tab == TAB_PATHS => app.rescan(),
         Key::Char('s') | Key::Char('S') => {
@@ -375,6 +468,7 @@ fn tab_names(app: &App) -> [&'static str; TAB_COUNT as usize] {
         s.tab_colors,
         s.tab_onoff,
         s.tab_animation,
+        s.tab_eq,
         s.tab_paths,
         s.tab_reference,
         s.tab_about,
@@ -425,6 +519,7 @@ fn row_at(app: &App, y: usize) -> Option<usize> {
         }
         TAB_ONOFF => (offset < ONOFF_ROWS).then_some(offset),
         TAB_ANIMATION => (offset < ANIM_ROWS).then_some(offset),
+        TAB_EQ => (offset < EQ_ROWS).then_some(offset),
         TAB_PATHS => (offset < max_row(app)).then_some(offset),
         _ => None,
     }
@@ -476,6 +571,21 @@ pub fn handle_pointer(app: &mut App, input: Input) {
             }
         }
         TAB_ONOFF | TAB_ANIMATION => cycle(app, if right { -1 } else { 1 }),
+        TAB_EQ => {
+            if target == 0 {
+                cycle_preset(app, if right { -1 } else { 1 });
+            } else if (SLIDER_X..SLIDER_X + SLIDER_W).contains(&col) {
+                // Drop the band straight onto the dB the pointer is over.
+                let middle = (SLIDER_W / 2) as f32;
+                let offset = (col - SLIDER_X) as f32 - middle;
+                let gain = (offset / middle * eq::MAX_GAIN).clamp(-eq::MAX_GAIN, eq::MAX_GAIN);
+                let mut gains = app.cfg.eq;
+                gains[target - 1] = (gain * 2.0).round() / 2.0;
+                set_eq(app, gains);
+            } else {
+                nudge_band(app, target - 1, if right { -0.5 } else { 0.5 });
+            }
+        }
         TAB_PATHS => {
             if right {
                 remove_path(app);
@@ -722,6 +832,64 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
                 y += 1;
             }
         }
+        TAB_EQ => {
+            edge!(y);
+            let selected = app.settings_row == 0;
+            at(&mut frame, y, 6, &pad(s.eq_preset, 25, true));
+            at(&mut frame, y, 32, ":");
+            at(
+                &mut frame,
+                y,
+                35,
+                &format!(
+                    "{}{}{}",
+                    if selected { INVERT } else { "" },
+                    pad(&preset_name(app), 20, true),
+                    RESET
+                ),
+            );
+            if selected {
+                at(&mut frame, y, 57, "\x1b[90m< \u{2194} >\x1b[0m");
+            }
+            y += 1;
+
+            for band in 0..eq::BANDS.len() {
+                edge!(y);
+                let selected = band as i32 + 1 == app.settings_row;
+                let gain = cfg.eq[band];
+                at(
+                    &mut frame,
+                    y,
+                    6,
+                    &format!(
+                        "{}{}{}",
+                        if selected { INVERT } else { "" },
+                        pad(&eq_label(band), 10, true),
+                        RESET
+                    ),
+                );
+                let tint = if gain > 0.05 {
+                    config::fg("34")
+                } else if gain < -0.05 {
+                    config::fg("203")
+                } else {
+                    config::fg("240")
+                };
+                at(
+                    &mut frame,
+                    y,
+                    SLIDER_X as i32,
+                    &format!("{}{}{}", tint, slider(gain), RESET),
+                );
+                at(
+                    &mut frame,
+                    y,
+                    (SLIDER_X + SLIDER_W + 2) as i32,
+                    &pad(&format!("{:+.1} dB", gain), 9, false),
+                );
+                y += 1;
+            }
+        }
         TAB_PATHS => {
             let rows = app.music_path_rows();
             for i in 0..rows.len() + 1 {
@@ -885,10 +1053,10 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
     }
     y += 1;
 
-    let hint = if app.settings_tab == TAB_PATHS {
-        s.paths_hint
-    } else {
-        s.settings_hint
+    let hint = match app.settings_tab {
+        TAB_PATHS => s.paths_hint,
+        TAB_EQ => s.eq_hint,
+        _ => s.settings_hint,
     };
     at(&mut frame, y, 1, &format!("\x1b[90m{}\x1b[0m", hint));
     y += 1;
@@ -1035,5 +1203,64 @@ mod tests {
         handle_pointer(&mut app, Input::Click { col: 40, row: 3 });
         assert_eq!(app.settings_row, 0);
         assert_eq!(app.settings_col, 0);
+    }
+
+    #[test]
+    fn the_eq_tab_draws_a_slider_per_band() {
+        let mut app = App::new();
+        app.mode = Mode::Settings;
+        app.settings_tab = TAB_EQ;
+        app.cfg.eq = [0.0; 10];
+        app.cfg.eq[0] = 6.0;
+
+        let body = visible(&build(&app, 155, 35));
+        assert!(body.contains("31 Hz"));
+        assert!(body.contains("16 kHz"));
+        assert!(body.contains("+6.0 dB"));
+        assert!(body.contains(app.lang.eq_preset));
+        assert_eq!(max_row(&app), 11);
+    }
+
+    #[test]
+    fn clicking_the_slider_sets_that_band() {
+        let mut app = App::new();
+        app.mode = Mode::Settings;
+        app.last_width = 155;
+        app.settings_tab = TAB_EQ;
+
+        // Row 4 on screen is band index 3 (250 Hz); the far right is max gain.
+        handle_pointer(
+            &mut app,
+            Input::Click {
+                col: SLIDER_X + SLIDER_W - 1,
+                row: 3 + 4,
+            },
+        );
+        assert_eq!(app.settings_row, 4);
+        assert!(app.cfg.eq[3] > 10.0, "band sat at {}", app.cfg.eq[3]);
+
+        handle_pointer(
+            &mut app,
+            Input::Click {
+                col: SLIDER_X + SLIDER_W / 2,
+                row: 3 + 4,
+            },
+        );
+        assert_eq!(app.cfg.eq[3], 0.0);
+    }
+
+    #[test]
+    fn a_preset_fills_the_whole_curve() {
+        let mut app = App::new();
+        app.mode = Mode::Settings;
+        app.settings_tab = TAB_EQ;
+        app.settings_row = 0;
+        cycle_preset(&mut app, 1);
+        assert_ne!(app.cfg.eq, [0.0; 10]);
+        assert_eq!(preset_name(&app), eq::PRESETS[1].0);
+
+        handle_key(&mut app, Key::Char('0'));
+        assert_eq!(app.cfg.eq, [0.0; 10]);
+        assert_eq!(preset_name(&app), "flat");
     }
 }
