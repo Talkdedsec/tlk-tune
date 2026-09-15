@@ -198,6 +198,7 @@ pub struct App {
     play_counted: bool,
     crossfade_started: bool,
     pending_open: Option<PathBuf>,
+    pending_query: bool,
 
     tx: Sender<Message>,
     rx: Receiver<Message>,
@@ -327,6 +328,7 @@ impl App {
             play_counted: false,
             crossfade_started: false,
             pending_open: None,
+            pending_query: false,
 
             tx,
             rx,
@@ -1696,6 +1698,15 @@ impl App {
         self.pending_open = Some(track);
     }
 
+    /// Opens with the library already narrowed, for `tlk-tune <words>`.
+    pub fn search_on_start(&mut self, query: &str) {
+        let query = query.trim();
+        if !query.is_empty() {
+            self.last_local_query = query.to_string();
+            self.pending_query = true;
+        }
+    }
+
     pub fn run(&mut self) {
         if !Console::available() {
             eprintln!("tlk-tune: this needs a terminal - try --preview or --help");
@@ -1713,10 +1724,11 @@ impl App {
         self.start_library_scan();
         match self.pending_open.take() {
             Some(track) => self.start_local(track),
-            None => {
+            None if !self.pending_query => {
                 let saved = session::load();
                 self.restore(&saved);
             }
+            None => {}
         }
 
         let mut last_frame = Instant::now();

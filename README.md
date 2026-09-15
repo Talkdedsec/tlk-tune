@@ -185,6 +185,7 @@ folder.
 tlk-tune --install              put it on your PATH, both names
 tlk-tune --uninstall            take it back off
 tlk-tune <file>                 play that file, and add its folder
+tlk-tune <words>                open with the library already searched
 tlk-tune --preview 155          render one frame at width 155 and exit
 tlk-tune --preview 155 oguzhan  render that frame with a search applied
 tlk-tune --version
