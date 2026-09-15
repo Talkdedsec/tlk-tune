@@ -27,6 +27,9 @@ tlk-tune
 - **Ten-band equaliser** with presets, adjustable by arrow keys or by clicking
   the slider.
 - **Gapless** track changes, and an optional crossfade up to twelve seconds.
+- Fits the window: the list shrinks on a short terminal and the record panel
+  steps aside rather than letting the frame scroll off the top.
+- A sleep timer, and a window title that says what is playing.
 - **Volume levelling** to EBU R 128: every track is measured once, then played
   at a consistent loudness, with a soft limiter instead of hard clipping.
 - **Likes, play counts and views**: `l` likes a track, `v` cycles the list
@@ -80,6 +83,8 @@ streaming and downloads.
 | Change view | `v` |
 | Filter by artist | `g` |
 | Reorder the queue | `Shift+↑` / `Shift+↓` |
+| Sleep timer | `t` |
+| Every key, on screen | `?` |
 | Download stream | `y` |
 | Settings | `s` |
 | Quit | `q` |
