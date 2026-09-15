@@ -730,23 +730,29 @@ pub fn list(app: &App, total_width: usize, height: usize) -> Vec<String> {
     let cfg = &app.cfg;
     let chrome = Chrome::new(cfg);
     let online = app.source == ListSource::Online;
+    // The default view and playback mode keep the reference label exactly;
+    // anything else names itself so the state is never invisible.
     let label = if online {
         app.lang.online_results.to_string()
-    } else if app.view_mode == ViewMode::All {
-        format!(
-            "{} ({}: {})",
-            app.lang.local_files,
-            app.lang.sort_prefix,
-            app.sort_name()
-        )
     } else {
-        format!(
-            "{} ({}, {}: {})",
-            app.lang.local_files,
-            app.view_name(),
-            app.lang.sort_prefix,
-            app.sort_name()
-        )
+        let mut notes: Vec<&str> = Vec::new();
+        if app.view_mode != ViewMode::All {
+            notes.push(app.view_name());
+        }
+        match cfg.play_mode {
+            1 => notes.push(app.lang.mode_loop),
+            2 => notes.push(app.lang.mode_shuffle),
+            3 => notes.push(app.lang.mode_stop),
+            _ => {}
+        }
+        let mut label = String::from(app.lang.local_files);
+        label.push_str(" (");
+        for note in notes {
+            label.push_str(note);
+            label.push_str(", ");
+        }
+        label.push_str(&format!("{}: {})", app.lang.sort_prefix, app.sort_name()));
+        label
     };
     let total = app.list_len();
     let inner = total_width.saturating_sub(4);
@@ -939,4 +945,44 @@ pub fn queue(app: &App, total_width: usize, height: usize) -> Vec<String> {
 
     out.push(chrome.bottom(total_width, "", &border_bottom));
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::App;
+
+    /// Starts from a known config rather than whatever the machine has.
+    fn fresh() -> App {
+        let mut app = App::new();
+        app.cfg = crate::config::Config::default();
+        app.apply_language(crate::lang::Language::En);
+        app
+    }
+
+    fn header(app: &App) -> String {
+        let line = list(app, 100, 3).remove(0);
+        let plain: String = line.chars().filter(|c| *c != '\u{1b}').collect();
+        plain
+    }
+
+    #[test]
+    fn the_default_view_keeps_the_reference_label() {
+        let app = fresh();
+        let text = header(&app);
+        assert!(text.contains("LOCAL AUDIO FILES (sort: name)"), "{text}");
+    }
+
+    #[test]
+    fn a_non_default_state_names_itself() {
+        let mut app = fresh();
+        app.cfg.play_mode = 2;
+        assert!(header(&app).contains(app.lang.mode_shuffle));
+
+        app.view_mode = crate::app::ViewMode::Liked;
+        let text = header(&app);
+        assert!(text.contains(app.lang.view_liked), "{text}");
+        assert!(text.contains(app.lang.mode_shuffle), "{text}");
+        assert!(text.contains("sort: name"), "{text}");
+    }
 }

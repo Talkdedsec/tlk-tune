@@ -1288,4 +1288,47 @@ mod tests {
         assert_eq!(app.cfg.eq, [0.0; 10]);
         assert_eq!(preset_name(&app), "flat");
     }
+
+    /// Every row the panel moves the cursor to. Only `ESC [ y ; x H` counts;
+    /// colour escapes share the prefix and must not be misread as positions.
+    fn positioned_rows(frame: &str) -> Vec<i32> {
+        let mut rows = Vec::new();
+        let bytes: Vec<char> = frame.chars().collect();
+        let mut i = 0;
+        while i + 1 < bytes.len() {
+            if bytes[i] != '\u{1b}' || bytes[i + 1] != '[' {
+                i += 1;
+                continue;
+            }
+            let mut j = i + 2;
+            let mut body = String::new();
+            while j < bytes.len() && (bytes[j].is_ascii_digit() || bytes[j] == ';') {
+                body.push(bytes[j]);
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == 'H' {
+                if let Some((y, _)) = body.split_once(';') {
+                    if let Ok(y) = y.parse::<i32>() {
+                        rows.push(y);
+                    }
+                }
+            }
+            i = j.max(i + 2);
+        }
+        rows
+    }
+
+    #[test]
+    fn the_panel_never_draws_below_the_window() {
+        let mut app = App::new();
+        app.mode = Mode::Settings;
+        for height in [20, 28, 35] {
+            let frame = build(&app, 155, height);
+            let lowest = positioned_rows(&frame).into_iter().max().unwrap_or(0);
+            assert!(
+                lowest <= height,
+                "at height {height} the panel reached row {lowest}"
+            );
+        }
+    }
 }

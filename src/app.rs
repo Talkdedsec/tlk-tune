@@ -111,6 +111,7 @@ pub enum Message {
     Lyrics(Lyrics),
     Waveform(Vec<f32>),
     Loudness(PathBuf, f64),
+    DecodeFailed,
     Artwork(Vec<String>),
     Status(String),
 }
@@ -670,6 +671,7 @@ impl App {
                 std::thread::sleep(Duration::from_millis(120));
             }
             if wave_sink.has_failed() {
+                let _ = wave_tx.send(Message::DecodeFailed);
                 return;
             }
             let mut builder =
@@ -1435,6 +1437,7 @@ impl App {
                     self.lyrics = result;
                 }
                 Message::Artwork(cells) => self.artwork = Some(cells),
+                Message::DecodeFailed => self.status = self.lang.decode_failed.to_string(),
                 Message::Loudness(path, lufs) => {
                     self.stats.set_loudness(&path, lufs);
                     if self.current_path.as_ref() == Some(&path) {
@@ -1519,8 +1522,10 @@ impl App {
             return ui::help::build(self, width, self.last_height);
         }
         if matches!(self.mode, Mode::Settings | Mode::ColorEdit) {
-            let player_height = ui::panels::player_height(self);
-            return settings_screen::build(self, width.max(80), player_height);
+            // Never taller than the window, and never taller than the player
+            // view it replaces.
+            let height = ui::panels::player_height(self).min(self.last_height as i32);
+            return settings_screen::build(self, width.max(80), height);
         }
 
         let mut frame = String::new();
