@@ -954,7 +954,7 @@ mod tests {
 
     /// Starts from a known config rather than whatever the machine has.
     fn fresh() -> App {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.cfg = crate::config::Config::default();
         app.apply_language(crate::lang::Language::En);
         app

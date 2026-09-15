@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn every_line_fills_the_width() {
-        let app = App::new();
+        let app = App::headless();
         let frame = build(&app, 120, 30);
         for line in strip(&frame).lines().filter(|l| !l.trim().is_empty()) {
             assert_eq!(text::width(line), 120, "line: {line:?}");
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn it_lists_the_configured_keys_not_hardcoded_ones() {
-        let mut app = App::new();
+        let mut app = App::headless();
         app.cfg
             .keys
             .insert("HKeyTogglePlayPause".to_string(), "z".to_string());
