@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::app::{App, ListSource, Mode, LIST_ROWS};
+use crate::app::{App, ListSource, Mode, ViewMode, LIST_ROWS};
 use crate::config::{self, Config};
 use crate::source::lyrics::LyricLine;
 use crate::text;
@@ -41,17 +41,24 @@ pub fn metadata(app: &mut App, total_width: usize) -> Vec<String> {
 
     let mut disk_frame: Vec<String> = Vec::new();
     if cfg.show_disk {
-        disk_frame = app.disk.frame(app.angle);
-        while disk_frame.len() < panel_h {
-            disk_frame.push(" ".repeat(disk_w));
-        }
-        for (i, row) in disk_frame.iter_mut().enumerate() {
-            let t = if panel_h > 1 {
-                i as f32 / (panel_h - 1) as f32
-            } else {
-                0.0
-            };
-            *row = format!("{}{}{}", config::ramp(&cfg.disk, &cfg.disk_end, t), row, RESET);
+        // Cover art takes the record's place when the file has one; the
+        // spinning vinyl is what a track without artwork falls back to.
+        match app.artwork.as_ref().filter(|rows| rows.len() == panel_h) {
+            Some(art) => disk_frame = art.clone(),
+            None => {
+                disk_frame = app.disk.frame(app.angle);
+                while disk_frame.len() < panel_h {
+                    disk_frame.push(" ".repeat(disk_w));
+                }
+                for (i, row) in disk_frame.iter_mut().enumerate() {
+                    let t = if panel_h > 1 {
+                        i as f32 / (panel_h - 1) as f32
+                    } else {
+                        0.0
+                    };
+                    *row = format!("{}{}{}", config::ramp(&cfg.disk, &cfg.disk_end, t), row, RESET);
+                }
+            }
         }
     }
 
@@ -714,10 +721,18 @@ pub fn list(app: &App, total_width: usize, height: usize) -> Vec<String> {
     let online = app.source == ListSource::Online;
     let label = if online {
         app.lang.online_results.to_string()
-    } else {
+    } else if app.view_mode == ViewMode::All {
         format!(
             "{} ({}: {})",
             app.lang.local_files,
+            app.lang.sort_prefix,
+            app.sort_name()
+        )
+    } else {
+        format!(
+            "{} ({}, {}: {})",
+            app.lang.local_files,
+            app.view_name(),
             app.lang.sort_prefix,
             app.sort_name()
         )
@@ -763,18 +778,14 @@ pub fn list(app: &App, total_width: usize, height: usize) -> Vec<String> {
                 let title_w = inner
                     .saturating_sub(INDEX_W + 2 + 2 + artist_w + 2 + duration_w)
                     .max(5);
-                let meta = app.row_meta.get(&t.path);
-                let artist = meta
-                    .map(|m| m.artist.clone())
-                    .filter(|a| !a.is_empty())
-                    .unwrap_or_else(|| t.folder.clone());
-                let duration = meta.map(|m| m.duration).unwrap_or(-1.0);
+                let duration = app.row_meta.get(&t.path).map(|m| m.duration).unwrap_or(-1.0);
+                let artist = app.display_artist(t);
                 content = format!(
                     "{}{} {}{} {}{} {}",
                     text::pad_right(&config::map_font(&(idx + 1).to_string(), &cfg.font), INDEX_W),
                     cfg.list_separator,
                     text::pad_right(
-                        &text::truncate(&config::map_font(&t.title, &cfg.font), title_w),
+                        &text::truncate(&config::map_font(&app.display_title(t), &cfg.font), title_w),
                         title_w
                     ),
                     cfg.list_separator,
@@ -794,6 +805,10 @@ pub fn list(app: &App, total_width: usize, height: usize) -> Vec<String> {
             && idx < total
             && Some(&app.view[idx].path) == app.current_path.as_ref();
 
+        let liked = !online
+            && idx < total
+            && app.stats.is_liked(&app.view[idx].path);
+
         let body = text::pad_right(&text::truncate(&content, inner), inner);
         let paint = if selected {
             format!(
@@ -806,6 +821,12 @@ pub fn list(app: &App, total_width: usize, height: usize) -> Vec<String> {
                 "{}{}",
                 config::fg(&cfg.list_playing_fg),
                 config::bg(&cfg.list_playing_bg)
+            )
+        } else if liked {
+            format!(
+                "{}{}",
+                config::fg(&cfg.list_liked_fg),
+                config::bg(&cfg.list_bg)
             )
         } else {
             format!("{}{}", config::fg(&cfg.list_fg), config::bg(&cfg.list_bg))

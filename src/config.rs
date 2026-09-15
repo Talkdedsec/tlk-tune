@@ -169,6 +169,7 @@ pub struct Config {
     pub language: Language,
 
     pub show_disk: bool,
+    pub show_album_art: bool,
     pub show_buttons: bool,
     pub show_queue: bool,
     pub show_waveform: bool,
@@ -234,6 +235,10 @@ pub struct Config {
 
     pub button: String,
 
+    pub crossfade_ms: u32,
+    pub eq: [f32; 10],
+    pub list_liked_fg: String,
+
     pub music_paths: Vec<String>,
     pub output_device: Option<String>,
     pub keys: BTreeMap<String, String>,
@@ -245,6 +250,7 @@ impl Default for Config {
             language: Language::En,
 
             show_disk: true,
+            show_album_art: true,
             show_buttons: true,
             show_queue: true,
             show_waveform: true,
@@ -309,6 +315,10 @@ impl Default for Config {
             lyric_word_bg: "0".into(),
 
             button: String::new(),
+
+            crossfade_ms: 0,
+            eq: [0.0; 10],
+            list_liked_fg: "214".into(),
 
             music_paths: Vec::new(),
             output_device: None,
@@ -517,8 +527,17 @@ pub fn load() -> Config {
             "ColorLyricsActiveWordFg" => c.lyric_word_fg = as_colour(value),
             "ColorLyricsActiveWordBg" => c.lyric_word_bg = as_colour(value),
             "ColorButton" => c.button = as_colour(value),
+            "ColorListLikedFg" => c.list_liked_fg = as_colour(value),
+
+            "CrossfadeMs" => c.crossfade_ms = value.trim().parse().unwrap_or(0).min(12_000),
+            "Equalizer" => {
+                for (i, part) in unquote(value).split(',').take(10).enumerate() {
+                    c.eq[i] = part.trim().parse::<f32>().unwrap_or(0.0).clamp(-12.0, 12.0);
+                }
+            }
 
             "ElimentDisk" => c.show_disk = as_bool(value),
+            "ElimentAlbumArt" => c.show_album_art = as_bool(value),
             "ElimentDummyButtons" => c.show_buttons = as_bool(value),
             "ElimentQueue" => c.show_queue = as_bool(value),
             "ElimentWaveForm" => c.show_waveform = as_bool(value),
@@ -655,6 +674,7 @@ pub fn save(c: &Config) -> std::io::Result<()> {
         ("ColorListPlayingBg", &c.list_playing_bg),
         ("ColorListCursorFg", &c.list_cursor_fg),
         ("ColorListCursorBg", &c.list_cursor_bg),
+        ("ColorListLikedFg", &c.list_liked_fg),
     ] {
         o.push_str(&format!("{}={}\n", k, v));
     }
@@ -686,6 +706,7 @@ pub fn save(c: &Config) -> std::io::Result<()> {
     o.push_str("##-------------------------------------------\n\n");
     for (k, v) in [
         ("ElimentDisk", c.show_disk),
+        ("ElimentAlbumArt", c.show_album_art),
         ("ElimentDummyButtons", c.show_buttons),
         ("ElimentQueue", c.show_queue),
         ("ElimentWaveForm", c.show_waveform),

@@ -16,13 +16,14 @@ use crate::source::local::{self, LocalTrack, SortMode};
 use crate::source::lyrics::{self, Lyrics};
 use crate::source::online::{self, OnlineResult};
 use crate::source::paths;
+use crate::source::stats::{self, Stats};
 use crate::terminal::{binding, Console, Input, Key};
 use crate::ui::layout::{self, Target};
 use crate::ui::{self, settings_screen};
 use crate::visual::disk::Disk;
 use crate::visual::spectrum::Spectrum;
 use crate::visual::sphere::Sphere;
-use crate::visual::waveform;
+use crate::visual::{artwork, waveform};
 
 pub const LIST_ROWS: usize = 8;
 const ANGULAR_VELOCITY: f64 = (2.0 * std::f64::consts::PI / 48.0) / 0.035;
@@ -34,6 +35,27 @@ pub enum Mode {
     Search,
     Settings,
     ColorEdit,
+}
+
+/// Which slice of the library the list shows. A flat folder of several
+/// hundred files is unusable without these.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ViewMode {
+    All,
+    Liked,
+    Played,
+    Recent,
+}
+
+impl ViewMode {
+    pub fn next(self) -> ViewMode {
+        match self {
+            ViewMode::All => ViewMode::Liked,
+            ViewMode::Liked => ViewMode::Played,
+            ViewMode::Played => ViewMode::Recent,
+            ViewMode::Recent => ViewMode::All,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -67,6 +89,7 @@ pub struct MetaView {
 pub struct RowMeta {
     pub duration: f64,
     pub artist: String,
+    pub title: String,
 }
 
 pub enum Message {
@@ -82,6 +105,7 @@ pub enum Message {
     ResolveFailed,
     Lyrics(Lyrics),
     Waveform(Vec<f32>),
+    Artwork(Vec<String>),
     Status(String),
 }
 
@@ -117,6 +141,7 @@ pub struct App {
     pub has_track: bool,
     pub current_path: Option<PathBuf>,
 
+    pub artwork: Option<Vec<String>>,
     pub waveform: Vec<f32>,
     pub waveform_ready: bool,
     pub waveform_at: Instant,
@@ -128,7 +153,9 @@ pub struct App {
     pub status: String,
     pub row_meta: HashMap<PathBuf, RowMeta>,
     pub sort_mode: SortMode,
+    pub view_mode: ViewMode,
     pub folder_filter: Option<String>,
+    pub stats: Stats,
 
     pub settings_tab: i32,
     pub settings_row: i32,
@@ -141,6 +168,7 @@ pub struct App {
 
     pub quit: bool,
     pub last_width: i32,
+    play_counted: bool,
 
     tx: Sender<Message>,
     rx: Receiver<Message>,
@@ -160,7 +188,16 @@ impl App {
         let (media_tx, media_rx) = channel();
         mediakeys::listen(media_tx);
 
+        let mut stats = Stats::load();
+        let imported = if stats.liked_count() == 0 && stats.plays.is_empty() {
+            stats::import_from_tlk_player(&mut stats)
+        } else {
+            None
+        };
+
         let mut player = Player::new(cfg.output_device.clone());
+        player.set_crossfade_ms(cfg.crossfade_ms);
+        player.set_eq(cfg.eq);
         player.set_volume(if restored.volume > 0 {
             restored.volume
         } else {
@@ -219,6 +256,7 @@ impl App {
             has_track: false,
             current_path: None,
 
+            artwork: None,
             waveform: Vec::new(),
             waveform_ready: false,
             waveform_at: Instant::now(),
@@ -227,10 +265,17 @@ impl App {
             lyrics_status: String::new(),
             lyrics_status_at: Instant::now(),
 
-            status: String::new(),
+            status: match imported {
+                Some((likes, plays)) if likes + plays > 0 => {
+                    format!("imported {likes} likes and {plays} tracks from tlk-player")
+                }
+                _ => String::new(),
+            },
             row_meta: HashMap::new(),
             sort_mode,
+            view_mode: ViewMode::All,
             folder_filter: None,
+            stats,
 
             settings_tab: 0,
             settings_row: 0,
@@ -243,6 +288,7 @@ impl App {
 
             quit: false,
             last_width: 155,
+            play_counted: false,
 
             tx,
             rx,
@@ -300,6 +346,7 @@ impl App {
                     let meta = RowMeta {
                         duration: entry.duration,
                         artist: entry.artist.clone(),
+                        title: entry.title.clone(),
                     };
                     if tx.send(Message::RowMeta(path.clone(), meta)).is_err() {
                         return;
@@ -326,6 +373,7 @@ impl App {
                 let meta = RowMeta {
                     duration: info.duration,
                     artist: info.artist,
+                    title: info.title,
                 };
                 if tx.send(Message::RowMeta(path.clone(), meta)).is_err() {
                     return;
@@ -336,14 +384,38 @@ impl App {
         });
     }
 
+    /// The tag title when one was read, otherwise the filename. Libraries
+    /// named "001 - Artist - Title.mp3" read far better this way.
+    pub fn display_title(&self, track: &LocalTrack) -> String {
+        match self.row_meta.get(&track.path) {
+            Some(meta) if !meta.title.trim().is_empty() => meta.title.clone(),
+            _ => track.title.clone(),
+        }
+    }
+
+    pub fn display_artist(&self, track: &LocalTrack) -> String {
+        match self.row_meta.get(&track.path) {
+            Some(meta) if !meta.artist.trim().is_empty() => meta.artist.clone(),
+            _ => track.folder.clone(),
+        }
+    }
+
     pub fn refresh_view(&mut self) {
         let query = self.last_local_query.clone();
         let folder = self.folder_filter.clone();
+        let mode = self.view_mode;
         let meta = &self.row_meta;
+        let stats = &self.stats;
 
         let mut rows: Vec<LocalTrack> = self
             .tracks
             .iter()
+            .filter(|t| match mode {
+                ViewMode::All => true,
+                ViewMode::Liked => stats.is_liked(&t.path),
+                ViewMode::Played => stats.plays(&t.path) > 0,
+                ViewMode::Recent => stats.last_played(&t.path) > 0,
+            })
             .filter(|t| match &folder {
                 Some(f) => &t.folder == f,
                 None => true,
@@ -352,11 +424,12 @@ impl App {
                 if query.is_empty() {
                     return true;
                 }
-                let artist = meta
-                    .get(&t.path)
-                    .map(|m| m.artist.clone())
-                    .unwrap_or_default();
+                let (artist, title) = match meta.get(&t.path) {
+                    Some(m) => (m.artist.clone(), m.title.clone()),
+                    None => (String::new(), String::new()),
+                };
                 local::match_score(&query, &t.title) > 0.0
+                    || local::match_score(&query, &title) > 0.0
                     || local::match_score(&query, &artist) > 0.0
                     || local::match_score(&query, &t.folder) > 0.0
             })
@@ -364,14 +437,24 @@ impl App {
             .collect();
 
         if query.is_empty() {
-            let lookup = self.row_meta.clone();
-            local::sort(&mut rows, self.sort_mode, move |t| {
-                lookup
-                    .get(&t.path)
-                    .map(|m| m.artist.clone())
-                    .filter(|a| !a.is_empty())
-                    .unwrap_or_else(|| t.folder.clone())
-            });
+            match mode {
+                ViewMode::Played => {
+                    rows.sort_by_key(|t| std::cmp::Reverse(self.stats.plays(&t.path)))
+                }
+                ViewMode::Recent => {
+                    rows.sort_by_key(|t| std::cmp::Reverse(self.stats.last_played(&t.path)))
+                }
+                _ => {
+                    let lookup = self.row_meta.clone();
+                    local::sort(&mut rows, self.sort_mode, move |t| {
+                        lookup
+                            .get(&t.path)
+                            .map(|m| m.artist.clone())
+                            .filter(|a| !a.is_empty())
+                            .unwrap_or_else(|| t.folder.clone())
+                    });
+                }
+            }
         } else {
             rows.sort_by(|a, b| {
                 local::match_score(&query, &b.title)
@@ -494,11 +577,13 @@ impl App {
             Source::Remote { .. } => None,
         };
         self.has_track = true;
+        self.artwork = None;
         self.waveform.clear();
         self.waveform_ready = false;
         self.lyrics = Lyrics::default();
         self.lyrics_status = self.lang.fetching_lyrics.to_string();
         self.lyrics_status_at = Instant::now();
+        self.play_counted = false;
         self.spectrum.reset();
         info
     }
@@ -538,6 +623,21 @@ impl App {
             let model = waveform::envelope(&mono, waveform::RESOLUTION, smooth);
             let _ = wave_tx.send(Message::Waveform(model));
         });
+
+        if self.cfg.show_album_art {
+            let art_source = source.clone();
+            let art_tx = self.tx.clone();
+            let cols = self.disk.width();
+            let rows = self.disk.height();
+            std::thread::spawn(move || {
+                let Some(bytes) = decoder::artwork(&art_source) else {
+                    return;
+                };
+                if let Some(cells) = artwork::render(&bytes, cols, rows) {
+                    let _ = art_tx.send(Message::Artwork(cells));
+                }
+            });
+        }
 
         let sink = self.spectrum.sink();
         self.player.play(Arc::clone(&pcm), 0.0, Some(sink));
@@ -827,6 +927,61 @@ impl App {
         } else if key == Key::Char('o') {
             self.sort_mode = self.sort_mode.next();
             self.refresh_view();
+        } else if key == Key::Char('l') {
+            self.toggle_like();
+        } else if key == Key::Char('v') {
+            self.view_mode = self.view_mode.next();
+            self.selected = 0;
+            self.scroll = 0;
+            self.refresh_view();
+        }
+    }
+
+    fn toggle_like(&mut self) {
+        let target = if self.queue_focus {
+            None
+        } else {
+            self.view.get(self.selected).map(|t| t.path.clone())
+        }
+        .or_else(|| self.current_path.clone());
+        let Some(path) = target else { return };
+
+        let liked = self.stats.toggle_like(&path);
+        self.status = format!(
+            "{} {}",
+            if liked { self.lang.liked } else { self.lang.unliked },
+            path.file_stem().and_then(|s| s.to_str()).unwrap_or_default()
+        );
+        if self.view_mode == ViewMode::Liked {
+            self.refresh_view();
+        }
+    }
+
+    /// Counted once a track has been listened to rather than skipped past.
+    fn count_play(&mut self) {
+        if self.play_counted || !self.has_track {
+            return;
+        }
+        let threshold = if self.total_sec > 0.0 {
+            (self.total_sec * 0.25).min(20.0)
+        } else {
+            20.0
+        };
+        if self.player.elapsed() < threshold {
+            return;
+        }
+        if let Some(path) = self.current_path.clone() {
+            self.stats.record_play(&path);
+            self.play_counted = true;
+        }
+    }
+
+    pub fn view_name(&self) -> &'static str {
+        match self.view_mode {
+            ViewMode::All => self.lang.view_all,
+            ViewMode::Liked => self.lang.view_liked,
+            ViewMode::Played => self.lang.view_played,
+            ViewMode::Recent => self.lang.view_recent,
         }
     }
 
@@ -1084,6 +1239,7 @@ impl App {
                     };
                     self.lyrics = result;
                 }
+                Message::Artwork(cells) => self.artwork = Some(cells),
                 Message::Waveform(model) => {
                     self.waveform = model;
                     self.waveform_ready = true;
@@ -1110,12 +1266,18 @@ impl App {
                     RowMeta {
                         duration: info.duration,
                         artist: info.artist,
+                        title: info.title,
                     },
                 );
             }
         }
         if let Some(track) = self.view.first().cloned() {
-            self.describe(&Source::File(track.path), "");
+            let source = Source::File(track.path);
+            self.describe(&source, "");
+            if self.cfg.show_album_art {
+                self.artwork = decoder::artwork(&source)
+                    .and_then(|bytes| artwork::render(&bytes, self.disk.width(), self.disk.height()));
+            }
         }
         self.render_frame(width)
     }
@@ -1285,6 +1447,7 @@ impl App {
             self.dt = now.duration_since(last_frame).as_secs_f64();
             last_frame = now;
 
+            self.count_play();
             if self.has_track && self.player.finished() {
                 self.advance();
             }
@@ -1300,7 +1463,8 @@ impl App {
         }
 
         self.persist();
-        self.player.stop();
+        self.stats.save();
+        self.player.close();
         console.close();
         let _ = config::save(&self.cfg);
     }
