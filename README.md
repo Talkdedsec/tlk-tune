@@ -172,6 +172,7 @@ folder.
 ## Other flags
 
 ```
+tlk-tune <file>                 play that file, and add its folder
 tlk-tune --preview 155          render one frame at width 155 and exit
 tlk-tune --preview 155 oguzhan  render that frame with a search applied
 tlk-tune --version

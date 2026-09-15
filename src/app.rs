@@ -28,9 +28,14 @@ use crate::visual::{artwork, waveform};
 
 /// The reference layout shows eight rows. The list only ever shrinks from
 /// there, so a short window degrades instead of scrolling the top away.
-/// Whether the next track should start now so the two overlap. Waiting for
-/// the track to finish would only ever mix the new one into silence, which is
-/// not a crossfade.
+pub const LIST_ROWS: usize = 8;
+pub const MIN_LIST_ROWS: usize = 3;
+const ANGULAR_VELOCITY: f64 = (2.0 * std::f64::consts::PI / 48.0) / 0.035;
+const FRAME: Duration = Duration::from_millis(40);
+
+/// Whether the next track should start now so the two overlap. Waiting for the
+/// track to finish would only ever mix the new one into silence, which is not
+/// a crossfade.
 pub fn crossfade_due(elapsed: f64, total: f64, fade: f64, play_mode: i32) -> bool {
     // Nothing to fade into when the player is about to stop, and a fade longer
     // than half the track would swallow it.
@@ -39,11 +44,6 @@ pub fn crossfade_due(elapsed: f64, total: f64, fade: f64, play_mode: i32) -> boo
     }
     elapsed >= total - fade
 }
-
-pub const LIST_ROWS: usize = 8;
-pub const MIN_LIST_ROWS: usize = 3;
-const ANGULAR_VELOCITY: f64 = (2.0 * std::f64::consts::PI / 48.0) / 0.035;
-const FRAME: Duration = Duration::from_millis(40);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -197,6 +197,7 @@ pub struct App {
     title_shown: String,
     play_counted: bool,
     crossfade_started: bool,
+    pending_open: Option<PathBuf>,
 
     tx: Sender<Message>,
     rx: Receiver<Message>,
@@ -325,6 +326,7 @@ impl App {
             title_shown: String::new(),
             play_counted: false,
             crossfade_started: false,
+            pending_open: None,
 
             tx,
             rx,
@@ -1431,7 +1433,7 @@ impl App {
                 Message::Library(found) => {
                     self.tracks = found;
                     self.status = if self.tracks.is_empty() {
-                        self.lang.no_music_path.to_string()
+                        self.lang.no_music_here.to_string()
                     } else {
                         String::new()
                     };
@@ -1678,6 +1680,24 @@ impl App {
             .unwrap_or(false)
     }
 
+    /// Plays a file handed to us on the command line, and makes sure its
+    /// folder is part of the library so the rest of the album is reachable.
+    pub fn open_on_start(&mut self, track: PathBuf) {
+        if !track.is_file() {
+            return;
+        }
+        if let Some(folder) = track.parent() {
+            let known = self.roots().iter().any(|r| paths::expand(r) == folder);
+            if !known {
+                self.cfg.music_paths = self.roots();
+                self.cfg
+                    .music_paths
+                    .push(folder.to_string_lossy().to_string());
+            }
+        }
+        self.pending_open = Some(track);
+    }
+
     pub fn run(&mut self) {
         let mut console = match Console::open() {
             Ok(c) => c,
@@ -1689,8 +1709,13 @@ impl App {
 
         self.online_enabled = online::available();
         self.start_library_scan();
-        let saved = session::load();
-        self.restore(&saved);
+        match self.pending_open.take() {
+            Some(track) => self.start_local(track),
+            None => {
+                let saved = session::load();
+                self.restore(&saved);
+            }
+        }
 
         let mut last_frame = Instant::now();
         while !self.quit {
