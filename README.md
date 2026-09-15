@@ -9,6 +9,29 @@ tlk-tune
 
 [Türkçe](README.tr.md)
 
+![The player](docs/player.png)
+
+<details>
+<summary>More of it</summary>
+
+Search that ignores accents — `dunya` typed on a plain keyboard finds `Dünya`:
+
+![Searching](docs/search.png)
+
+The settings screen, where every colour is edited against a live preview:
+
+![Settings](docs/settings.png)
+
+Every key and every gesture, on `?`:
+
+![Keys](docs/help.png)
+
+And it folds down when the window is narrow:
+
+![Narrow](docs/narrow.png)
+
+</details>
+
 ## What it does
 
 - Plays local files (MP3, FLAC, WAV, OGG, Opus, M4A, AAC, AIFF) decoded
@@ -188,10 +211,17 @@ tlk-tune <file>                 play that file, and add its folder
 tlk-tune <words>                open with the library already searched
 tlk-tune --preview 155          render one frame at width 155 and exit
 tlk-tune --preview 155 oguzhan  render that frame with a search applied
+tlk-tune --config <file> ...    keep the profile in that file instead
 tlk-tune --version
 ```
 
-`--preview` is how to check a colour scheme without launching the player.
+`--preview` is how to check a colour scheme without launching the player. It
+takes `--rows N` for a given window height and `--screen settings|help` for the
+other two screens.
+
+`--config` moves the whole profile — settings, session and statistics live in
+one folder — so the player can run from a stick without touching the machine
+it is plugged into. It has to come first on the line.
 
 ## Terminal
 
