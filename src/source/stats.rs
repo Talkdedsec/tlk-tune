@@ -19,7 +19,7 @@ pub struct Stats {
     /// release rarely line up with a rip of the same song.
     #[serde(default)]
     pub lyric_offset: HashMap<String, f64>,
-    #[serde(default)]
+    #[serde(skip)]
     dirty: bool,
 }
 
