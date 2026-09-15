@@ -9,6 +9,29 @@ tlk-tune
 
 [English](README.md)
 
+![Çalar](docs/player.png)
+
+<details>
+<summary>Dahası</summary>
+
+Aksanı yok sayan arama — düz klavyeyle yazılan `dunya`, `Dünya`'yı bulur:
+
+![Arama](docs/search.png)
+
+Ayar ekranı: her renk canlı önizleme üstünde düzenlenir.
+
+![Ayarlar](docs/settings.png)
+
+`?` ile bütün tuşlar ve fare hareketleri:
+
+![Tuşlar](docs/help.png)
+
+Pencere daraldığında kendini toplar:
+
+![Dar](docs/narrow.png)
+
+</details>
+
 ## Ne yapar
 
 - Yerel dosyaları çalar (MP3, FLAC, WAV, OGG, Opus, M4A, AAC, AIFF); çözme
@@ -187,10 +210,16 @@ tlk-tune <dosya>                o dosyayı çalar, klasörünü kitaplığa ekle
 tlk-tune <kelimeler>            kitaplık aranmış hâlde açılır
 tlk-tune --preview 155          155 sütun genişliğinde tek kare basıp çıkar
 tlk-tune --preview 155 oguzhan  aynı kareyi arama uygulanmış hâlde basar
+tlk-tune --config <dosya> ...   profili varsayılan yerine o dosyada tutar
 tlk-tune --version
 ```
 
-`--preview`, çaları açmadan renk şemasını kontrol etmek için.
+`--preview`, çaları açmadan renk şemasını kontrol etmek için. Pencere yüksekliği
+için `--rows N`, diğer iki ekran için `--screen settings|help` alır.
+
+`--config` profilin tamamını taşır — ayarlar, oturum ve istatistikler tek
+klasörde durur — yani çalar bir bellekten, takıldığı makineye hiçbir şey
+yazmadan çalışabilir. Satırın başında olmalı.
 
 ## Terminal
 
