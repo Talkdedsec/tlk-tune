@@ -72,7 +72,9 @@ Pencere daraldığında kendini toplar:
 
 ## Kurulum
 
-Rust araç zinciri gerekir.
+`tlk-tune.exe`'yi
+[son sürümden](https://github.com/Talkdedsec/tlk-tune/releases/latest) indir,
+ya da Rust araç zinciriyle kendin derle:
 
 ```
 git clone https://github.com/Talkdedsec/tlk-tune.git
@@ -80,10 +82,11 @@ cd tlk-tune
 cargo build --release
 ```
 
-Çıktı: `target/release/tlk-tune.exe`. Sonra:
+İki durumda da tek bir exe çıkar ve bulunduğu yerden çalışır. PATH'e koymak
+için:
 
 ```
-target\release\tlk-tune.exe --install
+tlk-tune.exe --install
 ```
 
 Exe'yi `%LOCALAPPDATA%\Programs\tlk-tune` altına kopyalar, o klasörü kullanıcı
