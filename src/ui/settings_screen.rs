@@ -1,7 +1,7 @@
 use crate::app::{App, Mode};
 use crate::config::{self, Config, LANGUAGES, LYRIC_ALIGNMENTS, LYRIC_ANIMATIONS, PLAY_MODES};
 use crate::lang::Language;
-use crate::terminal::Key;
+use crate::terminal::{Input, Key};
 use crate::text;
 
 const RESET: &str = "\x1b[0m";
@@ -9,6 +9,16 @@ const INVERT: &str = "\x1b[7m";
 const EDITING: &str = "\x1b[41;37m";
 const COLOUR_ROWS: usize = 14;
 const HOTKEY_ROWS: usize = 11;
+const ANIM_ROWS: usize = 10;
+const ONOFF_ROWS: usize = 7;
+const PATH_FIELD: usize = 60;
+
+pub const TAB_COLORS: i32 = 0;
+pub const TAB_ONOFF: i32 = 1;
+pub const TAB_ANIMATION: i32 = 2;
+pub const TAB_PATHS: i32 = 3;
+pub const TAB_REFERENCE: i32 = 4;
+const TAB_COUNT: i32 = 6;
 
 const HOTKEY_ACTIONS: [&str; HOTKEY_ROWS] = [
     "HKeySetting",
@@ -90,7 +100,8 @@ fn set_toggle(cfg: &mut Config, row: usize, value: bool) {
     }
 }
 
-fn animation_value(cfg: &Config, row: usize) -> String {
+fn animation_value(app: &App, row: usize) -> String {
+    let cfg = &app.cfg;
     match row {
         0 => cfg.viz_fluidity.to_string(),
         1 => if cfg.waveform_smooth { "smooth" } else { "raw" }.to_string(),
@@ -100,16 +111,26 @@ fn animation_value(cfg: &Config, row: usize) -> String {
         5 => cfg.viz_viscosity.to_string(),
         6 => LYRIC_ALIGNMENTS[cfg.lyric_alignment.clamp(0, 2) as usize].to_string(),
         7 => LYRIC_ANIMATIONS[cfg.lyric_animation.clamp(0, 4) as usize].to_string(),
-        _ => cfg.language.code().to_string(),
+        8 => cfg.language.code().to_string(),
+        _ => match &cfg.output_device {
+            Some(name) => name.clone(),
+            None if app.player.output().name.is_empty() => app.lang.device_default.to_string(),
+            None => app.player.output().name.clone(),
+        },
     }
 }
 
 fn row_value(app: &App, tab: i32, row: usize, col: usize) -> String {
     match tab {
-        0 => colour_value(&app.cfg, row, col),
-        1 => if toggle_value(&app.cfg, row) { "true" } else { "false" }.to_string(),
-        2 => animation_value(&app.cfg, row),
-        3 => HOTKEY_ACTIONS
+        TAB_COLORS => colour_value(&app.cfg, row, col),
+        TAB_ONOFF => if toggle_value(&app.cfg, row) {
+            "true"
+        } else {
+            "false"
+        }
+        .to_string(),
+        TAB_ANIMATION => animation_value(app, row),
+        TAB_REFERENCE => HOTKEY_ACTIONS
             .get(row)
             .map(|a| app.cfg.key(a).to_string())
             .unwrap_or_default(),
@@ -119,10 +140,11 @@ fn row_value(app: &App, tab: i32, row: usize, col: usize) -> String {
 
 pub fn max_row(app: &App) -> usize {
     match app.settings_tab {
-        0 => COLOUR_ROWS,
-        1 => 7,
-        2 => 9,
-        3 => HOTKEY_ROWS + app.cfg.font.len(),
+        TAB_COLORS => COLOUR_ROWS,
+        TAB_ONOFF => ONOFF_ROWS,
+        TAB_ANIMATION => ANIM_ROWS,
+        TAB_PATHS => app.music_path_rows().len() + 1,
+        TAB_REFERENCE => HOTKEY_ROWS + app.cfg.font.len(),
         _ => app.cfg.about.len().max(1),
     }
 }
@@ -130,20 +152,19 @@ pub fn max_row(app: &App) -> usize {
 fn cycle(app: &mut App, direction: i32) {
     let row = app.settings_row as usize;
     match app.settings_tab {
-        1 => {
+        TAB_ONOFF => {
             let value = !toggle_value(&app.cfg, row);
             set_toggle(&mut app.cfg, row, value);
         }
-        2 => match row {
+        TAB_ANIMATION => match row {
             0 => {
                 app.cfg.viz_fluidity = (app.cfg.viz_fluidity + direction).clamp(1, 10);
                 app.spectrum.set_fluidity(app.cfg.viz_fluidity);
             }
             1 => app.cfg.waveform_smooth = !app.cfg.waveform_smooth,
             2 => {
-                app.cfg.disk_speed =
-                    ((app.cfg.disk_speed * 100.0).round() as i32 + direction * 5) as f64 / 100.0;
-                app.cfg.disk_speed = app.cfg.disk_speed.clamp(0.01, 1.0);
+                let step = ((app.cfg.disk_speed * 100.0).round() as i32 + direction * 5) as f64;
+                app.cfg.disk_speed = (step / 100.0).clamp(0.01, 1.0);
             }
             3 => {
                 app.cfg.play_mode =
@@ -165,18 +186,32 @@ fn cycle(app: &mut App, direction: i32) {
                 app.cfg.lyric_animation =
                     (app.cfg.lyric_animation + direction).rem_euclid(LYRIC_ANIMATIONS.len() as i32)
             }
-            _ => {
+            8 => {
                 let current = LANGUAGES
                     .iter()
                     .position(|l| *l == app.cfg.language.code())
                     .unwrap_or(0) as i32;
                 let next = (current + direction).rem_euclid(LANGUAGES.len() as i32) as usize;
-                let language = Language::from_config(LANGUAGES[next]);
-                app.apply_language(language);
+                app.apply_language(Language::from_config(LANGUAGES[next]));
             }
+            _ => cycle_device(app, direction),
         },
         _ => {}
     }
+}
+
+/// Walks the real output list, with "system default" as the first entry.
+fn cycle_device(app: &mut App, direction: i32) {
+    let mut names: Vec<Option<String>> = vec![None];
+    names.extend(app.player.devices().into_iter().map(Some));
+    let current = names
+        .iter()
+        .position(|n| n == &app.cfg.output_device)
+        .unwrap_or(0) as i32;
+    let next = (current + direction).rem_euclid(names.len() as i32) as usize;
+    app.cfg.output_device = names[next].clone();
+    let chosen = app.cfg.output_device.clone();
+    app.player.use_device(chosen);
 }
 
 fn commit_edit(app: &mut App) {
@@ -184,12 +219,26 @@ fn commit_edit(app: &mut App) {
     let col = app.settings_col as usize;
     let value = app.edit_buffer.trim().to_string();
     match app.settings_tab {
-        0 => {
+        TAB_COLORS => {
             if let Some(field) = colour_field(&mut app.cfg, row, col) {
                 *field = value;
             }
         }
-        3 => {
+        TAB_PATHS => {
+            let mut rows = app.music_path_rows();
+            if value.is_empty() {
+                if row < rows.len() {
+                    rows.remove(row);
+                }
+            } else if row < rows.len() {
+                rows[row] = value;
+            } else {
+                rows.push(value);
+            }
+            app.cfg.music_paths = rows;
+            app.rescan();
+        }
+        TAB_REFERENCE => {
             if let Some(action) = HOTKEY_ACTIONS.get(row) {
                 if !value.is_empty() {
                     app.cfg.keys.insert(action.to_string(), value);
@@ -202,8 +251,52 @@ fn commit_edit(app: &mut App) {
     app.edit_buffer.clear();
 }
 
+fn begin_edit(app: &mut App) {
+    let row = app.settings_row as usize;
+    match app.settings_tab {
+        TAB_COLORS => {
+            app.edit_buffer = colour_value(&app.cfg, row, app.settings_col as usize);
+            app.mode = Mode::ColorEdit;
+        }
+        TAB_REFERENCE => {
+            if row < HOTKEY_ROWS {
+                app.edit_buffer = row_value(app, TAB_REFERENCE, row, 0);
+                app.mode = Mode::ColorEdit;
+            }
+        }
+        TAB_PATHS => {
+            app.edit_buffer = app.music_path_rows().get(row).cloned().unwrap_or_default();
+            app.mode = Mode::ColorEdit;
+        }
+        _ => {}
+    }
+}
+
+fn remove_path(app: &mut App) {
+    if app.settings_tab != TAB_PATHS {
+        return;
+    }
+    let row = app.settings_row as usize;
+    let mut rows = app.music_path_rows();
+    if row < rows.len() {
+        rows.remove(row);
+        app.cfg.music_paths = rows;
+        app.settings_row = (app.settings_row - 1).max(0);
+        app.rescan();
+    }
+}
+
+fn field_limit(app: &App) -> usize {
+    match app.settings_tab {
+        TAB_PATHS => 200,
+        TAB_REFERENCE => 20,
+        _ => 7,
+    }
+}
+
 pub fn handle_key(app: &mut App, key: Key) {
     if app.mode == Mode::ColorEdit {
+        let limit = field_limit(app);
         match key {
             Key::Enter => commit_edit(app),
             Key::Esc => {
@@ -213,7 +306,7 @@ pub fn handle_key(app: &mut App, key: Key) {
             Key::Backspace => {
                 app.edit_buffer.pop();
             }
-            Key::Char(c) if !c.is_control() && app.edit_buffer.chars().count() < 7 => {
+            Key::Char(c) if !c.is_control() && app.edit_buffer.chars().count() < limit => {
                 app.edit_buffer.push(c)
             }
             _ => {}
@@ -223,7 +316,7 @@ pub fn handle_key(app: &mut App, key: Key) {
 
     match key {
         Key::Tab => {
-            app.settings_tab = (app.settings_tab + 1) % 5;
+            app.settings_tab = (app.settings_tab + 1) % TAB_COUNT;
             app.settings_row = 0;
             app.settings_col = 0;
         }
@@ -233,34 +326,29 @@ pub fn handle_key(app: &mut App, key: Key) {
             app.settings_row = (app.settings_row + 1).min(limit.max(0));
         }
         Key::Left => {
-            if app.settings_tab == 0 {
+            if app.settings_tab == TAB_COLORS {
                 app.settings_col = (app.settings_col - 1).max(0);
             } else {
                 cycle(app, -1);
             }
         }
         Key::Right => {
-            if app.settings_tab == 0 {
+            if app.settings_tab == TAB_COLORS {
                 app.settings_col = (app.settings_col + 1).min(1);
             } else {
                 cycle(app, 1);
             }
         }
-        Key::Enter => {
-            if app.settings_tab == 0 || (app.settings_tab == 3 && app.settings_row < HOTKEY_ROWS as i32)
-            {
-                app.edit_buffer = row_value(
-                    app,
-                    app.settings_tab,
-                    app.settings_row as usize,
-                    app.settings_col as usize,
-                );
-                app.mode = Mode::ColorEdit;
-            }
+        Key::Enter => begin_edit(app),
+        Key::Char('a') | Key::Char('A') if app.settings_tab == TAB_PATHS => {
+            app.settings_row = max_row(app) as i32 - 1;
+            app.edit_buffer.clear();
+            app.mode = Mode::ColorEdit;
         }
+        Key::Char('d') | Key::Char('D') if app.settings_tab == TAB_PATHS => remove_path(app),
+        Key::Char('r') | Key::Char('R') if app.settings_tab == TAB_PATHS => app.rescan(),
         Key::Char('s') | Key::Char('S') => {
-            let saved = config::save(&app.cfg).is_ok();
-            app.status = if saved {
+            app.status = if config::save(&app.cfg).is_ok() {
                 app.lang.settings_saved.to_string()
             } else {
                 String::new()
@@ -273,6 +361,137 @@ pub fn handle_key(app: &mut App, key: Key) {
         _ => {}
     }
 }
+
+// -- geometry shared by rendering and hit testing ----------------------
+
+struct TabStrip {
+    top: Vec<(usize, usize, usize)>,
+    bottom: Vec<usize>,
+}
+
+fn tab_names(app: &App) -> [&'static str; TAB_COUNT as usize] {
+    let s = app.lang;
+    [
+        s.tab_colors,
+        s.tab_onoff,
+        s.tab_animation,
+        s.tab_paths,
+        s.tab_reference,
+        s.tab_about,
+    ]
+}
+
+fn tab_strip(app: &App, width: usize) -> TabStrip {
+    let names = tab_names(app);
+    let mut top = Vec::new();
+    let mut bottom = Vec::new();
+    let mut track = 22usize;
+    let mut x = 23usize;
+    let mut last_on_top = names.len();
+    for (i, name) in names.iter().enumerate() {
+        let cost = name.chars().count() + 10;
+        if track + cost < width.saturating_sub(2) {
+            track += cost;
+            last_on_top = i;
+        } else {
+            bottom.push(i);
+        }
+    }
+    for (i, name) in names.iter().enumerate() {
+        if bottom.contains(&i) {
+            continue;
+        }
+        let label = name.chars().count() + if i as i32 == app.settings_tab { 2 } else { 0 };
+        top.push((i, x + 2, x + 1 + label));
+        x += 5 + label + if i == last_on_top { 1 } else { 3 };
+    }
+    TabStrip { top, bottom }
+}
+
+/// Content row under a screen row, mirroring how `build` lays each tab out.
+fn row_at(app: &App, y: usize) -> Option<usize> {
+    if y < 3 {
+        return None;
+    }
+    let offset = y - 3;
+    match app.settings_tab {
+        TAB_COLORS => {
+            // One divider line sits above the LIST group.
+            if offset == 5 {
+                return None;
+            }
+            let row = if offset > 5 { offset - 1 } else { offset };
+            (row < COLOUR_ROWS).then_some(row)
+        }
+        TAB_ONOFF => (offset < ONOFF_ROWS).then_some(offset),
+        TAB_ANIMATION => (offset < ANIM_ROWS).then_some(offset),
+        TAB_PATHS => (offset < max_row(app)).then_some(offset),
+        _ => None,
+    }
+}
+
+pub fn handle_pointer(app: &mut App, input: Input) {
+    let width = app.last_width.max(80) as usize;
+    let strip = tab_strip(app, width);
+
+    let (col, row, right) = match input {
+        Input::Click { col, row } => (col, row, false),
+        Input::RightClick { col, row } => (col, row, true),
+        Input::Scroll { up, .. } => {
+            let delta = if up { -1 } else { 1 };
+            let limit = max_row(app) as i32 - 1;
+            app.settings_row = (app.settings_row + delta).clamp(0, limit.max(0));
+            return;
+        }
+        _ => return,
+    };
+
+    if app.mode == Mode::ColorEdit {
+        commit_edit(app);
+        return;
+    }
+
+    if row <= 2 {
+        if let Some((index, _, _)) = strip.top.iter().find(|(_, x0, x1)| col >= *x0 && col <= *x1) {
+            app.settings_tab = *index as i32;
+            app.settings_row = 0;
+            app.settings_col = 0;
+        }
+        return;
+    }
+
+    let Some(target) = row_at(app, row) else {
+        return;
+    };
+    let already = target as i32 == app.settings_row;
+    app.settings_row = target as i32;
+
+    match app.settings_tab {
+        TAB_COLORS => {
+            let col_index = i32::from(col >= 59);
+            let same_cell = already && col_index == app.settings_col;
+            app.settings_col = col_index;
+            if same_cell {
+                begin_edit(app);
+            }
+        }
+        TAB_ONOFF | TAB_ANIMATION => cycle(app, if right { -1 } else { 1 }),
+        TAB_PATHS => {
+            if right {
+                remove_path(app);
+            } else if already || target >= app.music_path_rows().len() {
+                begin_edit(app);
+            }
+        }
+        TAB_REFERENCE
+            if already => {
+                begin_edit(app);
+            }
+        _ => {}
+    }
+}
+
+// -- rendering ---------------------------------------------------------
 
 pub fn build(app: &App, width: usize, player_height: i32) -> String {
     let cfg = &app.cfg;
@@ -301,50 +520,28 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
         }
     };
 
-    let tabs = [
-        s.tab_colors,
-        s.tab_onoff,
-        s.tab_animation,
-        s.tab_reference,
-        s.tab_about,
-    ];
+    let tabs = tab_names(app);
+    let strip = tab_strip(app, width);
 
-    let mut top_tabs: Vec<usize> = Vec::new();
-    let mut bottom_tabs: Vec<usize> = Vec::new();
-    let mut track = 22usize;
-    for (i, name) in tabs.iter().enumerate() {
-        let cost = name.chars().count() + 10;
-        if track + cost < width.saturating_sub(2) {
-            top_tabs.push(i);
-            track += cost;
-        } else {
-            bottom_tabs.push(i);
-        }
-    }
-
-    let mut line1 = String::new();
-    let mut line2 = String::new();
-    let mut used = 0usize;
-    let title_cell = format!(
+    let mut line1 = format!(
         "\u{250c}\u{2500} {} {}\u{2510}",
         s.settings_title,
         "\u{2500}".repeat(17usize.saturating_sub(s.settings_title.chars().count()))
     );
-    line1.push_str(&title_cell);
-    line2.push_str("\u{2502}                    \u{2514}");
-    used += 22;
+    let mut line2 = String::from("\u{2502}                    \u{2514}");
+    let mut used = 22usize;
 
-    for (n, i) in top_tabs.iter().enumerate() {
-        let label = if *i as i32 == app.settings_tab {
-            format!("[{}]", tabs[*i])
+    for (n, (index, _, _)) in strip.top.iter().enumerate() {
+        let label = if *index as i32 == app.settings_tab {
+            format!("[{}]", tabs[*index])
         } else {
-            tabs[*i].to_string()
+            tabs[*index].to_string()
         };
         let len = label.chars().count();
         line1.push_str(&format!("  {}  \u{250c}", label));
         line2.push_str(&format!("{}\u{2518}", "\u{2500}".repeat(4 + len)));
         used += 5 + len;
-        if n == top_tabs.len() - 1 {
+        if n == strip.top.len() - 1 {
             line1.push('\u{2500}');
             line2.push(' ');
             used += 1;
@@ -366,8 +563,20 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
     at(&mut frame, 2, 1, &format!("{}{}{}", border(2), line2, RESET));
 
     let mut y = 3i32;
+    macro_rules! edge {
+        ($y:expr) => {
+            at(&mut frame, $y, 1, &format!("{}\u{2502}{}", border($y), RESET));
+            at(
+                &mut frame,
+                $y,
+                width as i32,
+                &format!("{}\u{2502}{}", border($y), RESET),
+            );
+        };
+    }
+
     match app.settings_tab {
-        0 => {
+        TAB_COLORS => {
             let groups = [
                 s.grp_border,
                 s.grp_disk,
@@ -432,14 +641,7 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
                     );
                     y += 1;
                 }
-                at(&mut frame, y, 1, &format!("{}\u{2502}{}", border(y), RESET));
-                at(
-                    &mut frame,
-                    y,
-                    width as i32,
-                    &format!("{}\u{2502}{}", border(y), RESET),
-                );
-
+                edge!(y);
                 at(&mut frame, y, 3, &pad(groups[i], 15, true));
                 at(&mut frame, y, 18, ":");
                 at(&mut frame, y, 20, &pad(left_labels[i], 14, false));
@@ -496,23 +698,16 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
                 y += 1;
             }
         }
-        1 | 2 => {
-            let labels: &[&str] = if app.settings_tab == 1 {
+        TAB_ONOFF | TAB_ANIMATION => {
+            let labels: &[&str] = if app.settings_tab == TAB_ONOFF {
                 &s.onoff_rows
             } else {
                 &s.anim_rows
             };
             for (i, label) in labels.iter().enumerate() {
-                at(&mut frame, y, 1, &format!("{}\u{2502}{}", border(y), RESET));
-                at(
-                    &mut frame,
-                    y,
-                    width as i32,
-                    &format!("{}\u{2502}{}", border(y), RESET),
-                );
+                edge!(y);
                 at(&mut frame, y, 6, &pad(label, 25, true));
                 at(&mut frame, y, 32, ":");
-
                 let selected = i as i32 == app.settings_row;
                 let value = pad(&row_value(app, app.settings_tab, i, 0), 20, true);
                 at(
@@ -527,7 +722,53 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
                 y += 1;
             }
         }
-        3 => {
+        TAB_PATHS => {
+            let rows = app.music_path_rows();
+            for i in 0..rows.len() + 1 {
+                edge!(y);
+                let selected = i as i32 == app.settings_row;
+                let editing = selected && app.mode == Mode::ColorEdit;
+                let body = if editing {
+                    pad(&app.edit_buffer, PATH_FIELD, true)
+                } else if i < rows.len() {
+                    pad(&rows[i], PATH_FIELD, true)
+                } else {
+                    pad(s.paths_add, PATH_FIELD, true)
+                };
+                at(
+                    &mut frame,
+                    y,
+                    6,
+                    &format!(
+                        "{}{}{}{}",
+                        if selected && !editing { INVERT } else { "" },
+                        if editing { EDITING } else { "" },
+                        body,
+                        RESET
+                    ),
+                );
+                if i < rows.len() {
+                    let mark = if app.path_exists(i) {
+                        format!("{}ok{}", config::fg("34"), RESET)
+                    } else {
+                        format!("{}{}{}", config::fg("203"), s.paths_missing, RESET)
+                    };
+                    at(&mut frame, y, 8 + PATH_FIELD as i32, &mark);
+                }
+                y += 1;
+            }
+            if cfg.music_paths.is_empty() {
+                edge!(y);
+                at(
+                    &mut frame,
+                    y,
+                    6,
+                    &format!("\x1b[90m{}\x1b[0m", s.no_music_path),
+                );
+                y += 1;
+            }
+        }
+        TAB_REFERENCE => {
             let letters: Vec<char> = cfg.font.keys().copied().collect();
             let total = HOTKEY_ROWS + 1 + letters.len();
             let visible = (max_y - 3).max(1) as usize;
@@ -545,13 +786,7 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
                 if index >= total {
                     break;
                 }
-                at(&mut frame, y, 1, &format!("{}\u{2502}{}", border(y), RESET));
-                at(
-                    &mut frame,
-                    y,
-                    width as i32,
-                    &format!("{}\u{2502}{}", border(y), RESET),
-                );
+                edge!(y);
                 if index == HOTKEY_ROWS {
                     y += 1;
                     continue;
@@ -564,9 +799,8 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
                     let raw = if editing {
                         app.edit_buffer.clone()
                     } else {
-                        row_value(app, 3, index, 0)
+                        row_value(app, TAB_REFERENCE, index, 0)
                     };
-                    let value = pad(&raw, 20, true);
                     at(
                         &mut frame,
                         y,
@@ -575,7 +809,7 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
                             "{}{}{}{}",
                             if selected { INVERT } else { "" },
                             if editing { EDITING } else { "" },
-                            value,
+                            pad(&raw, 20, true),
                             RESET
                         ),
                     );
@@ -600,13 +834,7 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
             let total = cfg.about.len();
             let scroll = (app.settings_row as usize).min(total.saturating_sub(visible));
             for r in 0..visible {
-                at(&mut frame, y, 1, &format!("{}\u{2502}{}", border(y), RESET));
-                at(
-                    &mut frame,
-                    y,
-                    width as i32,
-                    &format!("{}\u{2502}{}", border(y), RESET),
-                );
+                edge!(y);
                 if let Some(line) = cfg.about.get(scroll + r) {
                     at(&mut frame, y, 6, line);
                 }
@@ -616,17 +844,11 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
     }
 
     while y < max_y {
-        at(&mut frame, y, 1, &format!("{}\u{2502}{}", border(y), RESET));
-        at(
-            &mut frame,
-            y,
-            width as i32,
-            &format!("{}\u{2502}{}", border(y), RESET),
-        );
+        edge!(y);
         y += 1;
     }
 
-    if bottom_tabs.is_empty() {
+    if strip.bottom.is_empty() {
         at(
             &mut frame,
             y,
@@ -640,7 +862,7 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
         );
     } else {
         let mut line = String::from("\u{2514}\u{2500}");
-        for i in &bottom_tabs {
+        for i in &strip.bottom {
             if *i as i32 == app.settings_tab {
                 line.push_str(&format!(" [{}] \u{2500}", tabs[*i]));
             } else {
@@ -663,18 +885,25 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
     }
     y += 1;
 
-    at(&mut frame, y, 1, &format!("\x1b[90m{}\x1b[0m", s.settings_hint));
+    let hint = if app.settings_tab == TAB_PATHS {
+        s.paths_hint
+    } else {
+        s.settings_hint
+    };
+    at(&mut frame, y, 1, &format!("\x1b[90m{}\x1b[0m", hint));
     y += 1;
     if !app.status.is_empty() {
         at(&mut frame, y, 1, &format!("\x1b[32m{}\x1b[0m", app.status));
     }
 
     if app.mode == Mode::ColorEdit {
-        let (cy, cx) = if app.settings_tab == 0 {
-            let row = 3 + app.settings_row + i32::from(app.settings_row >= 5);
-            (row, if app.settings_col == 0 { 38 } else { 59 })
-        } else {
-            (3 + app.settings_row, 35)
+        let (cy, cx) = match app.settings_tab {
+            TAB_COLORS => (
+                3 + app.settings_row + i32::from(app.settings_row >= 5),
+                if app.settings_col == 0 { 38 } else { 59 },
+            ),
+            TAB_PATHS => (3 + app.settings_row, 6),
+            _ => (3 + app.settings_row, 35),
         };
         frame.push_str(&format!(
             "\x1b[{};{}H\x1b[?25h",
@@ -692,10 +921,9 @@ fn value_cell(
     col: usize,
     pad: &dyn Fn(&str, usize, bool) -> String,
 ) -> String {
-    let selected =
-        row as i32 == app.settings_row && col as i32 == app.settings_col && app.mode != Mode::ColorEdit;
-    let editing =
-        row as i32 == app.settings_row && col as i32 == app.settings_col && app.mode == Mode::ColorEdit;
+    let here = row as i32 == app.settings_row && col as i32 == app.settings_col;
+    let selected = here && app.mode != Mode::ColorEdit;
+    let editing = here && app.mode == Mode::ColorEdit;
     let raw = if editing {
         app.edit_buffer.clone()
     } else {
@@ -708,4 +936,104 @@ fn value_cell(
         pad(&raw, 7, true),
         RESET
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::terminal::Input;
+
+    fn visible(frame: &str) -> String {
+        let mut out = String::with_capacity(frame.len());
+        let mut chars = frame.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c != '\u{1b}' {
+                out.push(c);
+                continue;
+            }
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for f in chars.by_ref() {
+                    if f.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_paths_tab_lists_folders_and_an_add_row() {
+        let mut app = App::new();
+        app.cfg.music_paths = vec!["D:/Music".into(), "D:/Lists/night.m3u".into()];
+        app.mode = Mode::Settings;
+        app.settings_tab = TAB_PATHS;
+
+        let body = visible(&build(&app, 155, 35));
+        assert!(body.contains("D:/Music"));
+        assert!(body.contains("night.m3u"));
+        assert!(body.contains(app.lang.paths_add));
+        assert!(body.contains(app.lang.paths_missing));
+        assert_eq!(max_row(&app), 3);
+    }
+
+    #[test]
+    fn typing_a_path_adds_it_and_clearing_one_removes_it() {
+        let mut app = App::new();
+        app.cfg.music_paths = vec!["D:/Music".into()];
+        app.mode = Mode::Settings;
+        app.settings_tab = TAB_PATHS;
+
+        app.settings_row = 1;
+        app.edit_buffer = "E:/More".into();
+        app.mode = Mode::ColorEdit;
+        commit_edit(&mut app);
+        assert_eq!(app.cfg.music_paths, vec!["D:/Music", "E:/More"]);
+
+        app.settings_row = 0;
+        remove_path(&mut app);
+        assert_eq!(app.cfg.music_paths, vec!["E:/More"]);
+    }
+
+    #[test]
+    fn clicking_a_tab_switches_to_it() {
+        let mut app = App::new();
+        app.mode = Mode::Settings;
+        app.last_width = 155;
+        let strip = tab_strip(&app, 155);
+        let (index, x0, _) = strip.top[TAB_PATHS as usize];
+        assert_eq!(index, TAB_PATHS as usize);
+        handle_pointer(&mut app, Input::Click { col: x0, row: 1 });
+        assert_eq!(app.settings_tab, TAB_PATHS);
+    }
+
+    #[test]
+    fn clicking_a_toggle_flips_it() {
+        let mut app = App::new();
+        app.mode = Mode::Settings;
+        app.last_width = 155;
+        app.settings_tab = TAB_ONOFF;
+        let before = app.cfg.show_disk;
+        handle_pointer(&mut app, Input::Click { col: 40, row: 3 });
+        assert_eq!(app.settings_row, 0);
+        assert_ne!(app.cfg.show_disk, before);
+    }
+
+    #[test]
+    fn the_colour_grid_maps_clicks_to_the_right_cell() {
+        let mut app = App::new();
+        app.mode = Mode::Settings;
+        app.last_width = 155;
+        app.settings_tab = TAB_COLORS;
+
+        // Row 5 on screen is the divider above LIST, so row 6 is LIST itself.
+        handle_pointer(&mut app, Input::Click { col: 60, row: 9 });
+        assert_eq!(app.settings_row, 5);
+        assert_eq!(app.settings_col, 1);
+
+        handle_pointer(&mut app, Input::Click { col: 40, row: 3 });
+        assert_eq!(app.settings_row, 0);
+        assert_eq!(app.settings_col, 0);
+    }
 }

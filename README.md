@@ -13,6 +13,9 @@ tlk-tune
 
 - Plays local files (MP3, FLAC, WAV, OGG, Opus, M4A, AAC, AIFF) decoded
   natively in Rust — no ffmpeg, no codec pack.
+- **Mouse driven as well as keyboard**: click the transport buttons, click or
+  drag the waveform to seek, click the volume bar, click a row to select and
+  again to play, right-click to queue, scroll to move through the list.
 - Live FFT spectrum with configurable fluidity, decay and viscosity.
 - Braille waveform across the progress bar, built from the decoded PCM.
 - Spinning record with a colour gradient.
@@ -21,7 +24,12 @@ tlk-tune
 - Online search and streaming when `yt-dlp` is on PATH; everything else works
   without it.
 - English and Turkish interface.
-- An in-app settings screen: every colour, toggle, animation and hotkey.
+- An in-app settings screen: every colour, toggle, animation, music folder,
+  output device and hotkey — no text editor needed.
+- Reads m3u, m3u8 and pls playlists as if they were folders.
+- Remembers the track, position, volume and queue between runs.
+- Media keys work while the terminal is in the background.
+- Survives an unplugged headset: it reopens the device and keeps going.
 
 ## Install
 
@@ -59,6 +67,23 @@ streaming and downloads.
 | Settings | `s` |
 | Quit | `q` |
 
+### Mouse
+
+| Action | Gesture |
+| :--- | :--- |
+| Play / pause | Click the record, or the middle button |
+| Previous / next | Click `<<<` / `>>>` |
+| Seek | Click or drag the waveform |
+| Volume | Click or drag the volume bar |
+| Select a track | Click its row |
+| Play a track | Click the row again |
+| Queue a track | Right-click its row |
+| Remove from queue | Right-click it in the queue |
+| Scroll | Wheel over the list or the queue |
+| Search | Click the search line |
+| Settings | Click the ✦ box |
+| In settings | Click a tab, click a value to cycle it, click twice to type |
+
 Every binding is remappable on the settings screen's REFERENCE tab.
 
 ## Configuration
@@ -69,6 +94,7 @@ Colours are ANSI 256 palette indices as bare numbers; an empty value means
 
 ```ini
 Language=en
+OutputDevice=
 
 ColorBorderTop=250
 ColorBorderBottom=250
@@ -83,11 +109,19 @@ VisualizerFluidity=10
 LyricsAnimation=word by word
 
 LocalMusicPath=D:\Music
-LocalMusicPath=E:\Albums
+LocalMusicPath=%USERPROFILE%\Music
+LocalMusicPath=~/Music
+LocalMusicPath=D:\Lists\night.m3u
 ```
 
-With no `LocalMusicPath` set, the player scans your Music and Downloads
-folders.
+An entry may be a folder or a playlist file, and `~`, `%VAR%` and `$VAR` are
+expanded. With no `LocalMusicPath` set, the player scans your Music and
+Downloads folders. The PATHS tab in the settings screen edits the same list
+and shows whether each entry still resolves.
+
+Tag reads are cached in `%LOCALAPPDATA%\tlk-tune\library.json`, keyed by size
+and modification time, so only new or edited files are opened again on a later
+start.
 
 ## Lyrics
 
@@ -96,6 +130,14 @@ drives the karaoke highlight directly. Otherwise the player asks LRCLIB and
 spreads each line's timing over its words by character count, so the highlight
 still moves word by word. Results are cached under
 `%LOCALAPPDATA%\tlk-tune\lyrics`.
+
+## Online
+
+With `yt-dlp` on PATH, `/` then `s: query` searches. Playback streams over HTTP
+range requests and starts on the first packet; a full download into
+`%LOCALAPPDATA%\tlk-tune\stream` is the fallback for anything that refuses
+range requests. `y` saves the selected result as mp3 into your first music
+folder.
 
 ## Other flags
 

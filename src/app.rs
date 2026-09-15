@@ -5,15 +5,20 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::audio::buffer::PcmStream;
-use crate::audio::decoder::{self, TrackInfo};
+use crate::audio::decoder::{self, Source, TrackInfo};
 use crate::audio::player::Player;
 use crate::config::{self, Config};
 use crate::lang::{Language, Strings};
+use crate::mediakeys::{self, MediaKey};
+use crate::session::{self, QueuedTrack, Session};
+use crate::source::library::{self, Cache};
 use crate::source::local::{self, LocalTrack, SortMode};
 use crate::source::lyrics::{self, Lyrics};
 use crate::source::online::{self, OnlineResult};
-use crate::terminal::{binding, Console, Key};
-use crate::ui;
+use crate::source::paths;
+use crate::terminal::{binding, Console, Input, Key};
+use crate::ui::layout::{self, Target};
+use crate::ui::{self, settings_screen};
 use crate::visual::disk::Disk;
 use crate::visual::spectrum::Spectrum;
 use crate::visual::sphere::Sphere;
@@ -67,9 +72,10 @@ pub struct RowMeta {
 pub enum Message {
     Library(Vec<LocalTrack>),
     RowMeta(PathBuf, RowMeta),
+    ProbeDone,
     SearchResults(Vec<OnlineResult>),
     Resolved {
-        path: PathBuf,
+        source: Source,
         title: String,
         artist: String,
     },
@@ -116,7 +122,6 @@ pub struct App {
     pub waveform_at: Instant,
 
     pub lyrics: Lyrics,
-    pub lyrics_ready: bool,
     pub lyrics_status: String,
     pub lyrics_status_at: Instant,
 
@@ -135,28 +140,52 @@ pub struct App {
     pub online_enabled: bool,
 
     pub quit: bool,
-    pub pcm: Option<Arc<PcmStream>>,
+    pub last_width: i32,
 
     tx: Sender<Message>,
     rx: Receiver<Message>,
+    media_rx: Receiver<MediaKey>,
     seed: u64,
-    last_width: i32,
     last_mode: u8,
     force_redraw: bool,
-    meta_probed: bool,
+    probe_started: bool,
 }
 
 impl App {
     pub fn new() -> App {
         let cfg = config::load();
+        let restored = session::load();
         let lang = cfg.language.strings();
         let (tx, rx) = channel();
-        let mut player = Player::new();
-        player.set_volume(70);
+        let (media_tx, media_rx) = channel();
+        mediakeys::listen(media_tx);
+
+        let mut player = Player::new(cfg.output_device.clone());
+        player.set_volume(if restored.volume > 0 {
+            restored.volume
+        } else {
+            70
+        });
         let mut spectrum = Spectrum::new();
         spectrum.set_fluidity(cfg.viz_fluidity);
         spectrum.set_decay(cfg.viz_decay);
         spectrum.set_viscosity(cfg.viz_viscosity);
+
+        let sort_mode = match restored.sort {
+            1 => SortMode::Artist,
+            2 => SortMode::Folder,
+            3 => SortMode::Recent,
+            _ => SortMode::Name,
+        };
+        let queue = restored
+            .queue
+            .iter()
+            .map(|q| QueueItem {
+                title: q.title.clone(),
+                path: q.path.as_ref().map(PathBuf::from),
+                id: q.id.clone(),
+            })
+            .collect();
 
         App {
             cfg,
@@ -175,7 +204,7 @@ impl App {
             selected: 0,
             scroll: 0,
 
-            queue: Vec::new(),
+            queue,
             queue_selected: 0,
             queue_scroll: 0,
             queue_focus: false,
@@ -195,13 +224,12 @@ impl App {
             waveform_at: Instant::now(),
 
             lyrics: Lyrics::default(),
-            lyrics_ready: false,
             lyrics_status: String::new(),
             lyrics_status_at: Instant::now(),
 
             status: String::new(),
             row_meta: HashMap::new(),
-            sort_mode: SortMode::Name,
+            sort_mode,
             folder_filter: None,
 
             settings_tab: 0,
@@ -214,24 +242,29 @@ impl App {
             online_enabled: false,
 
             quit: false,
-            pcm: None,
+            last_width: 155,
 
             tx,
             rx,
+            media_rx,
             seed: 0x2545_F491_4F6C_DD1D,
-            last_width: 0,
             last_mode: 255,
             force_redraw: true,
-            meta_probed: false,
+            probe_started: false,
         }
     }
 
-    fn roots(&self) -> Vec<PathBuf> {
+    pub fn roots(&self) -> Vec<String> {
         if self.cfg.music_paths.is_empty() {
             local::default_paths()
         } else {
-            self.cfg.music_paths.iter().map(PathBuf::from).collect()
+            self.cfg.music_paths.clone()
         }
+    }
+
+    pub fn rescan(&mut self) {
+        self.probe_started = false;
+        self.start_library_scan();
     }
 
     fn start_library_scan(&mut self) {
@@ -239,30 +272,67 @@ impl App {
         let tx = self.tx.clone();
         self.status = self.lang.scanning.to_string();
         std::thread::spawn(move || {
-            let found = local::scan(&roots);
-            let _ = tx.send(Message::Library(found));
+            let _ = tx.send(Message::Library(local::scan(&roots)));
         });
     }
 
-    fn start_row_meta(&mut self) {
-        if self.meta_probed {
+    /// Reads tags for the whole library in the background, using the on-disk
+    /// cache so only new or edited files are opened again.
+    fn start_probe(&mut self) {
+        if self.probe_started {
             return;
         }
-        self.meta_probed = true;
-        let paths: Vec<PathBuf> = self.tracks.iter().map(|t| t.path.clone()).collect();
+        self.probe_started = true;
+        let files: Vec<(PathBuf, u64, u64)> = self
+            .tracks
+            .iter()
+            .map(|t| (t.path.clone(), library::stamp(t.modified), t.size))
+            .collect();
         let tx = self.tx.clone();
+
         std::thread::spawn(move || {
-            for p in paths {
-                if let Some(info) = decoder::probe(&p) {
+            let mut cache = Cache::load();
+            let present: Vec<PathBuf> = files.iter().map(|(p, _, _)| p.clone()).collect();
+            cache.prune(&present);
+
+            for (path, mtime, size) in &files {
+                if let Some(entry) = cache.get(path, *mtime, *size) {
                     let meta = RowMeta {
-                        duration: info.duration,
-                        artist: info.artist,
+                        duration: entry.duration,
+                        artist: entry.artist.clone(),
                     };
-                    if tx.send(Message::RowMeta(p, meta)).is_err() {
+                    if tx.send(Message::RowMeta(path.clone(), meta)).is_err() {
                         return;
                     }
+                    continue;
+                }
+                let Some(info) = decoder::probe(path) else {
+                    continue;
+                };
+                cache.put(
+                    path,
+                    library::Entry {
+                        mtime: *mtime,
+                        size: *size,
+                        duration: info.duration,
+                        artist: info.artist.clone(),
+                        title: info.title.clone(),
+                        year: info.year.clone(),
+                        sample_rate: info.sample_rate,
+                        channels: info.channels,
+                        bits: info.bits.clone(),
+                    },
+                );
+                let meta = RowMeta {
+                    duration: info.duration,
+                    artist: info.artist,
+                };
+                if tx.send(Message::RowMeta(path.clone(), meta)).is_err() {
+                    return;
                 }
             }
+            cache.save();
+            let _ = tx.send(Message::ProbeDone);
         });
     }
 
@@ -299,6 +369,7 @@ impl App {
                 lookup
                     .get(&t.path)
                     .map(|m| m.artist.clone())
+                    .filter(|a| !a.is_empty())
                     .unwrap_or_else(|| t.folder.clone())
             });
         } else {
@@ -317,21 +388,25 @@ impl App {
     }
 
     fn clamp_scroll(&mut self) {
+        let max_scroll = self.list_len().saturating_sub(LIST_ROWS);
         if self.selected < self.scroll {
             self.scroll = self.selected;
         }
         if self.selected >= self.scroll + LIST_ROWS {
             self.scroll = self.selected + 1 - LIST_ROWS;
         }
+        self.scroll = self.scroll.min(max_scroll);
     }
 
     fn clamp_queue_scroll(&mut self) {
+        let max_scroll = self.queue.len().saturating_sub(LIST_ROWS);
         if self.queue_selected < self.queue_scroll {
             self.queue_scroll = self.queue_selected;
         }
         if self.queue_selected >= self.queue_scroll + LIST_ROWS {
             self.queue_scroll = self.queue_selected + 1 - LIST_ROWS;
         }
+        self.queue_scroll = self.queue_scroll.min(max_scroll);
     }
 
     fn next_random(&mut self) -> u64 {
@@ -341,53 +416,70 @@ impl App {
         self.seed
     }
 
-    /// Fills the metadata panel from the file header. Returns what the decoder
-    /// found so the caller can size the playback buffer.
-    fn describe(&mut self, path: &Path) -> TrackInfo {
-        let info = decoder::probe(path).unwrap_or(TrackInfo {
-            duration: 0.0,
+    /// Fills the metadata panel from the stream header and returns what the
+    /// decoder found, so the caller can size the playback buffer.
+    fn describe(&mut self, source: &Source, fallback_title: &str) -> TrackInfo {
+        let info = decoder::probe_source(source).unwrap_or(TrackInfo {
             sample_rate: 44100,
             channels: 2,
             ..Default::default()
         });
 
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_string();
-        let title = if info.title.is_empty() {
-            stem.clone()
-        } else {
-            info.title.clone()
-        };
-        let artist = if info.artist.is_empty() {
-            path.parent()
-                .and_then(|p| p.file_name())
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_string()
-        } else {
-            info.artist.clone()
+        let (title, artist, format, size, location) = match source {
+            Source::File(path) => {
+                let stem = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                let artist = if info.artist.is_empty() {
+                    path.parent()
+                        .and_then(|p| p.file_name())
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string()
+                } else {
+                    info.artist.clone()
+                };
+                (
+                    if info.title.is_empty() {
+                        stem
+                    } else {
+                        info.title.clone()
+                    },
+                    artist,
+                    path.extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("")
+                        .to_uppercase(),
+                    local::human_size(std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)),
+                    path.parent()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default(),
+                )
+            }
+            Source::Remote { hint, .. } => (
+                if info.title.is_empty() {
+                    fallback_title.to_string()
+                } else {
+                    info.title.clone()
+                },
+                info.artist.clone(),
+                hint.to_uppercase(),
+                String::new(),
+                "stream".to_string(),
+            ),
         };
 
-        let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
         self.meta = MetaView {
-            name: title.clone(),
-            artist: artist.clone(),
+            name: title,
+            artist,
             year: info.year.clone(),
             sampling: format!("{} Hz", info.sample_rate),
             kind: if info.channels >= 2 { "stereo" } else { "mono" }.to_string(),
-            format: path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_uppercase(),
-            size: local::human_size(size),
-            location: path
-                .parent()
-                .map(|p| p.display().to_string())
-                .unwrap_or_default(),
+            format,
+            size,
+            location,
             extra_label: if info.bits.is_empty() {
                 String::new()
             } else {
@@ -397,38 +489,39 @@ impl App {
         };
 
         self.total_sec = info.duration;
-        self.current_path = Some(path.to_path_buf());
+        self.current_path = match source {
+            Source::File(path) => Some(path.clone()),
+            Source::Remote { .. } => None,
+        };
         self.has_track = true;
         self.waveform.clear();
         self.waveform_ready = false;
         self.lyrics = Lyrics::default();
-        self.lyrics_ready = false;
         self.lyrics_status = self.lang.fetching_lyrics.to_string();
         self.lyrics_status_at = Instant::now();
         self.spectrum.reset();
         info
     }
 
-    pub fn start_local(&mut self, path: PathBuf) {
-        let info = self.describe(&path);
+    pub fn start(&mut self, source: Source, fallback_title: &str) {
+        let info = self.describe(&source, fallback_title);
         let title = self.meta.name.clone();
         let artist = self.meta.artist.clone();
 
-        let out = self.player.output();
+        let (rate, channels) = {
+            let out = self.player.output();
+            (out.sample_rate, out.channels)
+        };
         let seconds = if info.duration > 0.0 {
             info.duration
         } else {
             600.0
         };
-        let pcm = Arc::new(PcmStream::with_seconds(
-            seconds,
-            out.sample_rate,
-            out.channels,
-        ));
+        let pcm = Arc::new(PcmStream::with_seconds(seconds, rate, channels));
 
-        let decode_path = path.clone();
+        let decode_source = source.clone();
         let decode_sink = Arc::clone(&pcm);
-        std::thread::spawn(move || decoder::decode_into(&decode_path, decode_sink));
+        std::thread::spawn(move || decoder::decode_into(decode_source, decode_sink));
 
         let wave_sink = Arc::clone(&pcm);
         let wave_tx = self.tx.clone();
@@ -440,26 +533,29 @@ impl App {
             if wave_sink.has_failed() {
                 return;
             }
-            let interleaved = wave_sink.snapshot();
-            let channels = wave_sink.channels.max(1);
-            let mono: Vec<f32> = interleaved
-                .chunks(channels)
-                .map(|f| f.iter().sum::<f32>() / channels as f32)
-                .collect();
+            let mut mono = Vec::with_capacity(wave_sink.available_frames());
+            wave_sink.for_each_mono(|v| mono.push(v));
             let model = waveform::envelope(&mono, waveform::RESOLUTION, smooth);
             let _ = wave_tx.send(Message::Waveform(model));
         });
 
         let sink = self.spectrum.sink();
         self.player.play(Arc::clone(&pcm), 0.0, Some(sink));
-        self.pcm = Some(pcm);
 
+        let track_path = match &source {
+            Source::File(path) => Some(path.clone()),
+            Source::Remote { .. } => None,
+        };
         let lyrics_tx = self.tx.clone();
         let duration = info.duration;
         std::thread::spawn(move || {
-            let result = lyrics::fetch(Some(&path), &title, &artist, duration);
+            let result = lyrics::fetch(track_path.as_deref(), &title, &artist, duration);
             let _ = lyrics_tx.send(Message::Lyrics(result));
         });
+    }
+
+    pub fn start_local(&mut self, path: PathBuf) {
+        self.start(Source::File(path), "");
     }
 
     fn start_online(&mut self, result: OnlineResult) {
@@ -467,16 +563,31 @@ impl App {
         self.load_started = Instant::now();
         self.status = self.lang.resolving.to_string();
         let tx = self.tx.clone();
-        std::thread::spawn(move || match online::resolve(&result.id) {
-            Some(path) => {
-                let _ = tx.send(Message::Resolved {
-                    path,
-                    title: result.title,
-                    artist: result.uploader,
-                });
+        std::thread::spawn(move || {
+            // Direct streaming first; a full download is the fallback for
+            // hosts or formats that refuse range requests.
+            if let Some((url, hint)) = online::stream_url(&result.id) {
+                let source = Source::Remote { url, hint };
+                if decoder::probe_source(&source).is_some() {
+                    let _ = tx.send(Message::Resolved {
+                        source,
+                        title: result.title,
+                        artist: result.uploader,
+                    });
+                    return;
+                }
             }
-            None => {
-                let _ = tx.send(Message::ResolveFailed);
+            match online::resolve(&result.id) {
+                Some(path) => {
+                    let _ = tx.send(Message::Resolved {
+                        source: Source::File(path),
+                        title: result.title,
+                        artist: result.uploader,
+                    });
+                }
+                None => {
+                    let _ = tx.send(Message::ResolveFailed);
+                }
             }
         });
     }
@@ -501,8 +612,7 @@ impl App {
             return;
         }
         let len = self.view.len() as i32;
-        let next = (self.selected as i32 + delta).rem_euclid(len);
-        self.selected = next as usize;
+        self.selected = (self.selected as i32 + delta).rem_euclid(len) as usize;
         self.source = ListSource::Local;
         self.clamp_scroll();
         if let Some(track) = self.view.get(self.selected).cloned() {
@@ -522,26 +632,25 @@ impl App {
         }
     }
 
+    fn play_queue_entry(&mut self, item: QueueItem) {
+        match (item.path, item.id) {
+            (Some(p), _) => self.start_local(p),
+            (None, Some(id)) => self.start_online(OnlineResult {
+                id,
+                title: item.title,
+                ..Default::default()
+            }),
+            _ => {}
+        }
+    }
+
     fn advance(&mut self) {
         self.player.clear_finished();
         if !self.queue.is_empty() {
             let item = self.queue.remove(0);
             self.clamp_queue();
-            match (item.path, item.id) {
-                (Some(p), _) => {
-                    self.start_local(p);
-                    return;
-                }
-                (None, Some(id)) => {
-                    self.start_online(OnlineResult {
-                        id,
-                        title: item.title,
-                        ..Default::default()
-                    });
-                    return;
-                }
-                _ => {}
-            }
+            self.play_queue_entry(item);
+            return;
         }
         match self.cfg.play_mode {
             1 => {
@@ -605,8 +714,7 @@ impl App {
             self.status = self.lang.searching.to_string();
             let tx = self.tx.clone();
             std::thread::spawn(move || {
-                let found = online::search(&query, 20);
-                let _ = tx.send(Message::SearchResults(found));
+                let _ = tx.send(Message::SearchResults(online::search(&query, 20)));
             });
             return;
         }
@@ -627,8 +735,8 @@ impl App {
         };
         let target = self
             .roots()
-            .into_iter()
-            .next()
+            .first()
+            .map(|r| paths::expand(r))
             .unwrap_or_else(|| PathBuf::from("."));
         self.status = self.lang.download_started.to_string();
         let tx = self.tx.clone();
@@ -642,152 +750,141 @@ impl App {
         });
     }
 
-    fn handle_browse_key(&mut self, key: Key) {
-        let cfg_key = |action: &str| binding(self.cfg.key(action));
+    pub fn list_len(&self) -> usize {
+        match self.source {
+            ListSource::Local => self.view.len(),
+            ListSource::Online => self.online.len(),
+        }
+    }
 
-        if key == cfg_key("HKeyQuit") {
+    pub fn sort_name(&self) -> &'static str {
+        match self.sort_mode {
+            SortMode::Name => self.lang.sort_name,
+            SortMode::Artist => self.lang.sort_artist,
+            SortMode::Folder => self.lang.sort_folder,
+            SortMode::Recent => self.lang.sort_recent,
+        }
+    }
+
+    pub fn apply_language(&mut self, language: Language) {
+        self.cfg.language = language;
+        self.lang = language.strings();
+        self.force_redraw = true;
+    }
+
+    // -- input ---------------------------------------------------------
+
+    fn handle_browse_key(&mut self, key: Key) {
+        let bound = |action: &str| binding(self.cfg.key(action));
+
+        if key == bound("HKeyQuit") {
             self.quit = true;
-            return;
-        }
-        if key == cfg_key("HKeySetting") {
-            self.mode = Mode::Settings;
-            self.settings_tab = 0;
-            self.settings_row = 0;
-            self.settings_col = 0;
-            self.force_redraw = true;
-            return;
-        }
-        if key == Key::Char('/') {
+        } else if key == bound("HKeySetting") {
+            self.open_settings();
+        } else if key == Key::Char('/') {
             self.mode = Mode::Search;
             self.search_buffer.clear();
-            return;
-        }
-        if key == cfg_key("HKeySwitchBetweenCards") {
+        } else if key == bound("HKeySwitchBetweenCards") {
             if self.cfg.show_queue {
                 self.queue_focus = !self.queue_focus;
             }
-            return;
-        }
-        if key == cfg_key("HKeyNavigateUp") {
-            if self.queue_focus {
-                self.queue_selected = self.queue_selected.saturating_sub(1);
-                self.clamp_queue_scroll();
-            } else {
-                self.selected = self.selected.saturating_sub(1);
-                self.clamp_scroll();
-            }
-            return;
-        }
-        if key == cfg_key("HKeyNavigateDown") {
-            if self.queue_focus {
-                if self.queue_selected + 1 < self.queue.len() {
-                    self.queue_selected += 1;
-                }
-                self.clamp_queue_scroll();
-            } else {
-                let len = self.list_len();
-                if self.selected + 1 < len {
-                    self.selected += 1;
-                }
-                self.clamp_scroll();
-            }
-            return;
-        }
-        if key == cfg_key("HKeyPlay") {
-            if self.queue_focus {
-                if self.queue_selected < self.queue.len() {
-                    let item = self.queue.remove(self.queue_selected);
-                    self.clamp_queue();
-                    match (item.path, item.id) {
-                        (Some(p), _) => self.start_local(p),
-                        (None, Some(id)) => self.start_online(OnlineResult {
-                            id,
-                            title: item.title,
-                            ..Default::default()
-                        }),
-                        _ => {}
-                    }
-                }
-            } else {
-                self.play_selected();
-            }
-            return;
-        }
-        if key == cfg_key("HKeyTogglePlayPause") {
+        } else if key == bound("HKeyNavigateUp") {
+            self.move_cursor(-1);
+        } else if key == bound("HKeyNavigateDown") {
+            self.move_cursor(1);
+        } else if key == bound("HKeyPlay") {
+            self.activate_selection();
+        } else if key == bound("HKeyTogglePlayPause") {
             self.player.toggle_pause();
-            return;
-        }
-        if key == cfg_key("HKeyPlayNextSong") {
+        } else if key == bound("HKeyPlayNextSong") {
             self.play_relative(1);
-            return;
-        }
-        if key == cfg_key("HKeyPlayPreviousSong") {
+        } else if key == bound("HKeyPlayPreviousSong") {
             self.play_relative(-1);
-            return;
-        }
-        if key == cfg_key("HKeySeekForward") {
+        } else if key == bound("HKeySeekForward") {
             self.player.seek(5.0);
-            return;
-        }
-        if key == cfg_key("HKeySeekBackward") {
+        } else if key == bound("HKeySeekBackward") {
             self.player.seek(-5.0);
-            return;
-        }
-        if key == cfg_key("HKeyIncreaseVolume") {
+        } else if key == bound("HKeyIncreaseVolume") {
             let v = self.player.volume() + 5;
             self.player.set_volume(v);
-            return;
-        }
-        if key == cfg_key("HKeyDecreaseVolume") {
+        } else if key == bound("HKeyDecreaseVolume") {
             let v = self.player.volume() - 5;
             self.player.set_volume(v);
-            return;
-        }
-        if key == cfg_key("HKeyToggleRepeat") {
+        } else if key == bound("HKeyToggleRepeat") {
             self.cfg.play_mode = if self.cfg.play_mode == 1 { 0 } else { 1 };
-            return;
-        }
-        if key == cfg_key("HKeyToggleShuffle") {
+        } else if key == bound("HKeyToggleShuffle") {
             self.cfg.play_mode = if self.cfg.play_mode == 2 { 0 } else { 2 };
-            return;
-        }
-        if key == cfg_key("HKeyAddHoveringSongToQueue") {
+        } else if key == bound("HKeyAddHoveringSongToQueue") {
             self.queue_add_selected();
-            return;
-        }
-        if key == cfg_key("HKeyRemoveHoveringSongFromQueue") {
-            if self.queue_focus && self.queue_selected < self.queue.len() {
-                self.queue.remove(self.queue_selected);
-                self.clamp_queue();
-            } else if !self.queue.is_empty() {
-                self.queue.pop();
-            }
-            return;
-        }
-        if key == cfg_key("HKeyFilterForFolder") {
-            if self.source == ListSource::Local {
-                self.folder_filter = self.view.get(self.selected).map(|t| t.folder.clone());
-                self.selected = 0;
-                self.refresh_view();
-            }
-            return;
-        }
-        if key == cfg_key("HKeyClearFilter") {
-            self.folder_filter = None;
-            self.last_local_query.clear();
-            self.source = ListSource::Local;
-            self.selected = 0;
-            self.refresh_view();
-            return;
-        }
-        if key == cfg_key("HKeyDownloadStream") {
+        } else if key == bound("HKeyRemoveHoveringSongFromQueue") {
+            self.remove_from_queue();
+        } else if key == bound("HKeyFilterForFolder") {
+            self.filter_to_folder();
+        } else if key == bound("HKeyClearFilter") {
+            self.clear_filter();
+        } else if key == bound("HKeyDownloadStream") {
             self.download_current();
-            return;
-        }
-        if key == Key::Char('o') {
+        } else if key == Key::Char('o') {
             self.sort_mode = self.sort_mode.next();
             self.refresh_view();
         }
+    }
+
+    fn open_settings(&mut self) {
+        self.mode = Mode::Settings;
+        self.settings_tab = 0;
+        self.settings_row = 0;
+        self.settings_col = 0;
+        self.force_redraw = true;
+    }
+
+    fn move_cursor(&mut self, delta: i32) {
+        if self.queue_focus {
+            let last = self.queue.len().saturating_sub(1) as i32;
+            self.queue_selected = (self.queue_selected as i32 + delta).clamp(0, last.max(0)) as usize;
+            self.clamp_queue_scroll();
+        } else {
+            let last = self.list_len().saturating_sub(1) as i32;
+            self.selected = (self.selected as i32 + delta).clamp(0, last.max(0)) as usize;
+            self.clamp_scroll();
+        }
+    }
+
+    fn activate_selection(&mut self) {
+        if self.queue_focus {
+            if self.queue_selected < self.queue.len() {
+                let item = self.queue.remove(self.queue_selected);
+                self.clamp_queue();
+                self.play_queue_entry(item);
+            }
+        } else {
+            self.play_selected();
+        }
+    }
+
+    fn remove_from_queue(&mut self) {
+        if self.queue_focus && self.queue_selected < self.queue.len() {
+            self.queue.remove(self.queue_selected);
+            self.clamp_queue();
+        } else if !self.queue.is_empty() {
+            self.queue.pop();
+        }
+    }
+
+    fn filter_to_folder(&mut self) {
+        if self.source == ListSource::Local {
+            self.folder_filter = self.view.get(self.selected).map(|t| t.folder.clone());
+            self.selected = 0;
+            self.refresh_view();
+        }
+    }
+
+    fn clear_filter(&mut self) {
+        self.folder_filter = None;
+        self.last_local_query.clear();
+        self.source = ListSource::Local;
+        self.selected = 0;
+        self.refresh_view();
     }
 
     fn handle_search_key(&mut self, key: Key) {
@@ -820,21 +917,114 @@ impl App {
         self.refresh_view();
     }
 
-    pub fn list_len(&self) -> usize {
-        match self.source {
-            ListSource::Local => self.view.len(),
-            ListSource::Online => self.online.len(),
+    fn handle_media_key(&mut self, key: MediaKey) {
+        match key {
+            MediaKey::PlayPause => self.player.toggle_pause(),
+            MediaKey::Next => self.play_relative(1),
+            MediaKey::Previous => self.play_relative(-1),
+            MediaKey::Stop => {
+                self.player.stop();
+                self.has_track = false;
+            }
         }
     }
 
-    pub fn sort_name(&self) -> &'static str {
-        match self.sort_mode {
-            SortMode::Name => self.lang.sort_name,
-            SortMode::Artist => self.lang.sort_artist,
-            SortMode::Folder => self.lang.sort_folder,
-            SortMode::Recent => self.lang.sort_recent,
+    fn handle_pointer(&mut self, input: Input) {
+        if matches!(self.mode, Mode::Settings | Mode::ColorEdit) {
+            settings_screen::handle_pointer(self, input);
+            return;
+        }
+        let layout = layout::layout_for(self, self.last_width.max(40) as usize);
+        match input {
+            Input::Click { col, row } | Input::Drag { col, row } => {
+                let dragging = matches!(input, Input::Drag { .. });
+                match layout::hit(&layout, col, row) {
+                    Target::PlayPause if !dragging => self.player.toggle_pause(),
+                    Target::Previous if !dragging => self.play_relative(-1),
+                    Target::Next if !dragging => self.play_relative(1),
+                    Target::Seek(per_mille) => {
+                        if self.total_sec > 0.0 {
+                            self.player
+                                .seek_to(self.total_sec * per_mille as f64 / 1000.0);
+                        }
+                    }
+                    Target::Volume(percent) => self.player.set_volume(percent as i32),
+                    Target::Search if !dragging => {
+                        self.mode = Mode::Search;
+                        self.search_buffer.clear();
+                    }
+                    Target::Settings if !dragging => self.open_settings(),
+                    Target::ListRow(index) if !dragging => self.click_list_row(index),
+                    Target::QueueRow(index) if !dragging => self.click_queue_row(index),
+                    _ => {}
+                }
+            }
+            Input::RightClick { col, row } => match layout::hit(&layout, col, row) {
+                Target::ListRow(index) => {
+                    let target = self.scroll + index;
+                    if target < self.list_len() {
+                        self.selected = target;
+                        self.queue_add_selected();
+                    }
+                }
+                Target::QueueRow(index) => {
+                    let target = self.queue_scroll + index;
+                    if target < self.queue.len() {
+                        self.queue.remove(target);
+                        self.clamp_queue();
+                    }
+                }
+                _ => {}
+            },
+            Input::Scroll { col, row, up } => {
+                let step = if up { -3 } else { 3 };
+                let over_queue = self.cfg.show_queue
+                    && col >= layout.queue_x.0
+                    && col <= layout.queue_x.1
+                    && row >= layout.rows_y.0
+                    && row <= layout.rows_y.1;
+                if over_queue {
+                    let max = self.queue.len().saturating_sub(LIST_ROWS) as i32;
+                    self.queue_scroll = (self.queue_scroll as i32 + step).clamp(0, max.max(0)) as usize;
+                } else {
+                    let max = self.list_len().saturating_sub(LIST_ROWS) as i32;
+                    self.scroll = (self.scroll as i32 + step).clamp(0, max.max(0)) as usize;
+                }
+            }
+            _ => {}
         }
     }
+
+    /// First click moves the cursor, a second click on the same row plays it.
+    fn click_list_row(&mut self, index: usize) {
+        let target = self.scroll + index;
+        if target >= self.list_len() {
+            return;
+        }
+        self.queue_focus = false;
+        if self.selected == target {
+            self.play_selected();
+        } else {
+            self.selected = target;
+        }
+    }
+
+    fn click_queue_row(&mut self, index: usize) {
+        let target = self.queue_scroll + index;
+        if target >= self.queue.len() {
+            return;
+        }
+        if self.queue_focus && self.queue_selected == target {
+            let item = self.queue.remove(target);
+            self.clamp_queue();
+            self.play_queue_entry(item);
+        } else {
+            self.queue_focus = true;
+            self.queue_selected = target;
+        }
+    }
+
+    // -- background results --------------------------------------------
 
     fn drain_messages(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
@@ -847,10 +1037,15 @@ impl App {
                         String::new()
                     };
                     self.refresh_view();
-                    self.start_row_meta();
+                    self.start_probe();
                 }
                 Message::RowMeta(path, meta) => {
                     self.row_meta.insert(path, meta);
+                }
+                Message::ProbeDone => {
+                    if self.last_local_query.is_empty() {
+                        self.refresh_view();
+                    }
                 }
                 Message::SearchResults(found) => {
                     self.online = found;
@@ -863,17 +1058,17 @@ impl App {
                     };
                 }
                 Message::Resolved {
-                    path,
+                    source,
                     title,
                     artist,
                 } => {
                     self.loading = false;
                     self.status.clear();
-                    self.start_local(path);
+                    self.start(source, &title);
                     if !title.is_empty() {
                         self.meta.name = title;
                     }
-                    if !artist.is_empty() {
+                    if !artist.is_empty() && self.meta.artist.is_empty() {
                         self.meta.artist = artist;
                     }
                 }
@@ -882,12 +1077,11 @@ impl App {
                     self.status = self.lang.no_results.to_string();
                 }
                 Message::Lyrics(result) => {
-                    self.lyrics_ready = true;
-                    if result.lines.is_empty() {
-                        self.lyrics_status = self.lang.no_lyrics.to_string();
+                    self.lyrics_status = if result.lines.is_empty() {
+                        self.lang.no_lyrics.to_string()
                     } else {
-                        self.lyrics_status.clear();
-                    }
+                        String::new()
+                    };
                     self.lyrics = result;
                 }
                 Message::Waveform(model) => {
@@ -900,15 +1094,12 @@ impl App {
         }
     }
 
-    pub fn apply_language(&mut self, language: Language) {
-        self.cfg.language = language;
-        self.lang = language.strings();
-        self.force_redraw = true;
-    }
+    // -- rendering -----------------------------------------------------
 
     /// Renders a single frame with the library loaded but nothing playing.
     /// Useful for checking a colour scheme without launching the player.
     pub fn preview(&mut self, width: usize) -> String {
+        self.last_width = width as i32;
         self.tracks = local::scan(&self.roots());
         self.refresh_view();
         for track in self.view.iter().take(LIST_ROWS) {
@@ -923,7 +1114,7 @@ impl App {
             }
         }
         if let Some(track) = self.view.first().cloned() {
-            self.describe(&track.path);
+            self.describe(&Source::File(track.path), "");
         }
         self.render_frame(width)
     }
@@ -942,7 +1133,7 @@ impl App {
 
         if matches!(self.mode, Mode::Settings | Mode::ColorEdit) {
             let player_height = ui::panels::player_height(self);
-            return ui::settings_screen::build(self, width.max(80), player_height);
+            return settings_screen::build(self, width.max(80), player_height);
         }
 
         let mut frame = String::new();
@@ -966,8 +1157,7 @@ impl App {
             let queue_w = width - list_w;
             let left = ui::panels::list(self, list_w, LIST_ROWS);
             let right = ui::panels::queue(self, queue_w, LIST_ROWS);
-            let rows = left.len().max(right.len());
-            for i in 0..rows {
+            for i in 0..left.len().max(right.len()) {
                 let l = left.get(i).cloned().unwrap_or_else(|| " ".repeat(list_w));
                 let r = right.get(i).cloned().unwrap_or_else(|| " ".repeat(queue_w));
                 frame.push_str(&l);
@@ -992,6 +1182,61 @@ impl App {
         frame
     }
 
+    // -- lifecycle -----------------------------------------------------
+
+    fn restore(&mut self, saved: &Session) {
+        let Some(track) = saved.track.as_ref().map(PathBuf::from) else {
+            return;
+        };
+        if !track.exists() {
+            return;
+        }
+        self.start_local(track);
+        if saved.position > 1.0 {
+            self.player.seek_to(saved.position);
+        }
+        self.player.set_paused(true);
+    }
+
+    fn persist(&self) {
+        session::save(&Session {
+            track: self
+                .current_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
+            position: self.player.elapsed(),
+            volume: self.player.volume(),
+            paused: self.player.is_paused(),
+            sort: match self.sort_mode {
+                SortMode::Name => 0,
+                SortMode::Artist => 1,
+                SortMode::Folder => 2,
+                SortMode::Recent => 3,
+            },
+            queue: self
+                .queue
+                .iter()
+                .map(|q| QueuedTrack {
+                    title: q.title.clone(),
+                    path: q.path.as_ref().map(|p| p.to_string_lossy().to_string()),
+                    id: q.id.clone(),
+                })
+                .collect(),
+        });
+    }
+
+    /// Rows shown on the settings screen's PATHS tab.
+    pub fn music_path_rows(&self) -> Vec<String> {
+        self.roots()
+    }
+
+    pub fn path_exists(&self, index: usize) -> bool {
+        self.music_path_rows()
+            .get(index)
+            .map(|p| Path::new(&paths::expand(p)).exists())
+            .unwrap_or(false)
+    }
+
     pub fn run(&mut self) {
         let mut console = match Console::open() {
             Ok(c) => c,
@@ -1003,26 +1248,37 @@ impl App {
 
         self.online_enabled = online::available();
         self.start_library_scan();
-        let mut last_frame = Instant::now();
+        let saved = session::load();
+        self.restore(&saved);
 
+        let mut last_frame = Instant::now();
         while !self.quit {
             loop {
-                let key = console.read_key();
-                if key == Key::None {
-                    break;
-                }
-                if key == Key::Char('\u{3}') {
-                    self.quit = true;
-                    break;
-                }
-                match self.mode {
-                    Mode::Browse => self.handle_browse_key(key),
-                    Mode::Search => self.handle_search_key(key),
-                    Mode::Settings | Mode::ColorEdit => ui::settings_screen::handle_key(self, key),
+                let input = console.read();
+                match input {
+                    Input::None => break,
+                    Input::Key(Key::Char('\u{3}')) => {
+                        self.quit = true;
+                        break;
+                    }
+                    Input::Key(key) => match self.mode {
+                        Mode::Browse => self.handle_browse_key(key),
+                        Mode::Search => self.handle_search_key(key),
+                        Mode::Settings | Mode::ColorEdit => settings_screen::handle_key(self, key),
+                    },
+                    Input::Resize => self.force_redraw = true,
+                    other => self.handle_pointer(other),
                 }
             }
 
+            while let Ok(key) = self.media_rx.try_recv() {
+                self.handle_media_key(key);
+            }
             self.drain_messages();
+
+            if self.player.device_lost() {
+                self.player.reopen();
+            }
 
             let now = Instant::now();
             self.dt = now.duration_since(last_frame).as_secs_f64();
@@ -1032,8 +1288,7 @@ impl App {
                 self.advance();
             }
             if self.has_track && !self.player.is_paused() {
-                self.angle = (self.angle
-                    + ANGULAR_VELOCITY * self.cfg.disk_speed * self.dt)
+                self.angle = (self.angle + ANGULAR_VELOCITY * self.cfg.disk_speed * self.dt)
                     % (2.0 * std::f64::consts::PI);
             }
 
@@ -1043,6 +1298,7 @@ impl App {
             std::thread::sleep(FRAME);
         }
 
+        self.persist();
         self.player.stop();
         console.close();
         let _ = config::save(&self.cfg);

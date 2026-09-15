@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{SampleFormat, StreamConfig};
+use cpal::{Device, SampleFormat, StreamConfig};
 
 use super::buffer::PcmStream;
 use crate::visual::spectrum::SpectrumSink;
@@ -10,6 +10,7 @@ use crate::visual::spectrum::SpectrumSink;
 pub struct Output {
     pub sample_rate: u32,
     pub channels: usize,
+    pub name: String,
 }
 
 struct Shared {
@@ -17,6 +18,7 @@ struct Shared {
     gain: AtomicU32,
     paused: AtomicBool,
     finished: AtomicBool,
+    lost: AtomicBool,
 }
 
 impl Shared {
@@ -29,16 +31,18 @@ pub struct Player {
     stream: Option<cpal::Stream>,
     shared: Arc<Shared>,
     pcm: Option<Arc<PcmStream>>,
+    sink: Option<SpectrumSink>,
     output: Output,
+    preferred: Option<String>,
     volume: i32,
-    has_track: bool,
 }
 
 impl Player {
-    pub fn new() -> Player {
-        let output = probe_output().unwrap_or(Output {
+    pub fn new(preferred: Option<String>) -> Player {
+        let output = probe_output(preferred.as_deref()).unwrap_or(Output {
             sample_rate: 48000,
             channels: 2,
+            name: String::new(),
         });
         Player {
             stream: None,
@@ -47,16 +51,44 @@ impl Player {
                 gain: AtomicU32::new(0.7f32.to_bits()),
                 paused: AtomicBool::new(false),
                 finished: AtomicBool::new(false),
+                lost: AtomicBool::new(false),
             }),
             pcm: None,
+            sink: None,
             output,
+            preferred,
             volume: 70,
-            has_track: false,
         }
     }
 
     pub fn output(&self) -> &Output {
         &self.output
+    }
+
+    /// Names of every output the host can see, current one first.
+    pub fn devices(&self) -> Vec<String> {
+        let mut names: Vec<String> = cpal::default_host()
+            .output_devices()
+            .map(|list| list.filter_map(|d| d.name().ok()).collect())
+            .unwrap_or_default();
+        names.dedup();
+        names
+    }
+
+    /// Switches output. Playback restarts from where it was, because a cpal
+    /// stream is bound to one device for its lifetime.
+    pub fn use_device(&mut self, name: Option<String>) {
+        self.preferred = name;
+        let at = self.elapsed();
+        let pcm = self.pcm.clone();
+        let sink = self.sink.clone();
+        self.stop();
+        if let Some(output) = probe_output(self.preferred.as_deref()) {
+            self.output = output;
+        }
+        if let Some(pcm) = pcm {
+            self.play(pcm, at, sink);
+        }
     }
 
     pub fn play(&mut self, pcm: Arc<PcmStream>, start_sec: f64, sink: Option<SpectrumSink>) -> bool {
@@ -68,9 +100,9 @@ impl Player {
             .store((start_sec * rate as f64) as i64, Ordering::Relaxed);
         self.shared.finished.store(false, Ordering::Relaxed);
         self.shared.paused.store(false, Ordering::Relaxed);
+        self.shared.lost.store(false, Ordering::Relaxed);
 
-        let host = cpal::default_host();
-        let Some(device) = host.default_output_device() else {
+        let Some(device) = pick_device(self.preferred.as_deref()) else {
             return false;
         };
         let config = StreamConfig {
@@ -80,7 +112,9 @@ impl Player {
         };
 
         let shared = Arc::clone(&self.shared);
+        let errors = Arc::clone(&self.shared);
         let source = Arc::clone(&pcm);
+        let feed = sink.clone();
         let stream = device.build_output_stream(
             &config,
             move |out: &mut [f32], _: &cpal::OutputCallbackInfo| {
@@ -96,7 +130,7 @@ impl Player {
                     return;
                 }
                 source.read_into(cursor as usize, out, shared.gain());
-                if let Some(s) = &sink {
+                if let Some(s) = &feed {
                     s.push(out, rate);
                 }
                 let next = cursor + frames as i64;
@@ -107,7 +141,11 @@ impl Player {
                 }
                 shared.cursor.store(next, Ordering::Relaxed);
             },
-            |_| {},
+            move |err| {
+                if matches!(err, cpal::StreamError::DeviceNotAvailable) {
+                    errors.lost.store(true, Ordering::Relaxed);
+                }
+            },
             None,
         );
 
@@ -117,14 +155,34 @@ impl Player {
         }
         self.stream = Some(stream);
         self.pcm = Some(pcm);
-        self.has_track = true;
+        self.sink = sink;
         true
+    }
+
+    /// True once the device disappeared under us — an unplugged headset, a
+    /// driver reset. The caller reopens rather than going silently quiet.
+    pub fn device_lost(&self) -> bool {
+        self.shared.lost.load(Ordering::Relaxed)
+    }
+
+    pub fn reopen(&mut self) {
+        self.shared.lost.store(false, Ordering::Relaxed);
+        let at = self.elapsed();
+        let pcm = self.pcm.clone();
+        let sink = self.sink.clone();
+        self.stream = None;
+        if let Some(output) = probe_output(self.preferred.as_deref()) {
+            self.output = output;
+        }
+        if let Some(pcm) = pcm {
+            self.play(pcm, at, sink);
+        }
     }
 
     pub fn stop(&mut self) {
         self.stream = None;
         self.pcm = None;
-        self.has_track = false;
+        self.sink = None;
         self.shared.cursor.store(0, Ordering::Relaxed);
         self.shared.finished.store(false, Ordering::Relaxed);
     }
@@ -134,15 +192,27 @@ impl Player {
         self.shared.paused.store(!paused, Ordering::Relaxed);
     }
 
+    pub fn set_paused(&self, paused: bool) {
+        self.shared.paused.store(paused, Ordering::Relaxed);
+    }
+
     pub fn is_paused(&self) -> bool {
         self.shared.paused.load(Ordering::Relaxed)
     }
 
     pub fn seek(&self, delta_sec: f64) {
+        self.seek_to(self.elapsed() + delta_sec);
+    }
+
+    /// Clamped to what the decoder has actually produced. Jumping past that
+    /// would play silence until decoding caught up, which reads as a bug.
+    pub fn seek_to(&self, seconds: f64) {
         let Some(pcm) = &self.pcm else { return };
-        let delta = (delta_sec * pcm.sample_rate as f64) as i64;
-        let cursor = (self.shared.cursor.load(Ordering::Relaxed) + delta).max(0);
-        self.shared.cursor.store(cursor, Ordering::Relaxed);
+        let limit = pcm.available_frames().saturating_sub(1);
+        let frame = (seconds.max(0.0) * pcm.sample_rate as f64) as usize;
+        self.shared
+            .cursor
+            .store(frame.min(limit) as i64, Ordering::Relaxed);
         self.shared.finished.store(false, Ordering::Relaxed);
     }
 
@@ -170,9 +240,20 @@ impl Player {
     }
 }
 
-fn probe_output() -> Option<Output> {
+fn pick_device(preferred: Option<&str>) -> Option<Device> {
     let host = cpal::default_host();
-    let device = host.default_output_device()?;
+    if let Some(want) = preferred.filter(|w| !w.is_empty()) {
+        if let Ok(mut list) = host.output_devices() {
+            if let Some(found) = list.find(|d| d.name().map(|n| n == want).unwrap_or(false)) {
+                return Some(found);
+            }
+        }
+    }
+    host.default_output_device()
+}
+
+fn probe_output(preferred: Option<&str>) -> Option<Output> {
+    let device = pick_device(preferred)?;
     let config = device
         .supported_output_configs()
         .ok()?
@@ -182,11 +263,12 @@ fn probe_output() -> Option<Output> {
     let rate = device
         .default_output_config()
         .map(|c| c.sample_rate().0)
-        .unwrap_or(48000);
-    let rate = rate.clamp(config.min_sample_rate().0, config.max_sample_rate().0);
+        .unwrap_or(48000)
+        .clamp(config.min_sample_rate().0, config.max_sample_rate().0);
     Some(Output {
         sample_rate: rate,
         channels,
+        name: device.name().unwrap_or_default(),
     })
 }
 
@@ -201,9 +283,11 @@ mod tests {
         if cpal::default_host().default_output_device().is_none() {
             return;
         }
-        let mut player = Player::new();
-        let out = player.output();
-        let (rate, channels) = (out.sample_rate, out.channels);
+        let mut player = Player::new(None);
+        let (rate, channels) = {
+            let out = player.output();
+            (out.sample_rate, out.channels)
+        };
         let pcm = Arc::new(PcmStream::with_seconds(2.0, rate, channels));
         let tone: Vec<f32> = (0..rate as usize * channels)
             .map(|i| ((i / channels) as f32 * 0.01).sin() * 0.2)
@@ -215,7 +299,11 @@ mod tests {
         assert!(player.play(Arc::clone(&pcm), 0.0, None), "device refused");
         std::thread::sleep(Duration::from_millis(400));
         let elapsed = player.elapsed();
-        player.stop();
         assert!(elapsed > 0.1, "cursor stalled at {elapsed}");
+
+        player.seek_to(900.0);
+        let clamped = player.elapsed();
+        player.stop();
+        assert!(clamped <= 1.01, "seek ran past the buffer to {clamped}");
     }
 }
