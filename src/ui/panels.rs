@@ -321,8 +321,11 @@ fn build_lyrics(
     }
 }
 
+/// Centres in the space available, and shortens with an ellipsis rather than
+/// letting the panel edge cut a word in half.
 fn centred(value: &str, width: usize) -> String {
-    let pad = width.saturating_sub(text::width(value)) / 2;
+    let value = text::truncate(value, width);
+    let pad = width.saturating_sub(text::width(&value)) / 2;
     text::pad_right(&format!("{}{}", " ".repeat(pad), value), width)
 }
 
@@ -984,5 +987,16 @@ mod tests {
         assert!(text.contains(app.lang.view_liked), "{text}");
         assert!(text.contains(app.lang.mode_shuffle), "{text}");
         assert!(text.contains("sort: name"), "{text}");
+    }
+
+    #[test]
+    fn a_caption_too_wide_is_shortened_not_cut() {
+        let long = "sozler getiriliyor ...";
+        let narrow = centred(long, 16);
+        assert_eq!(text::width(&narrow), 16);
+        assert!(narrow.trim().ends_with("..."), "{narrow:?}");
+
+        let roomy = centred("x", 9);
+        assert_eq!(roomy, "    x    ");
     }
 }

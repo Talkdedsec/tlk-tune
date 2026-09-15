@@ -74,10 +74,10 @@ pub fn search(query: &str, count: usize) -> Vec<OnlineResult> {
         .collect()
 }
 
-/// Resolves a direct, range-capable media URL plus its container extension.
-/// This is what lets an online track start on the first packet instead of
-/// after a full download.
-pub fn stream_url(id: &str) -> Option<(String, String)> {
+/// A direct, range-capable media URL, its container extension, and how long
+/// yt-dlp says it runs. The duration matters because some containers do not
+/// carry a frame count, and the playback buffer is sized from it.
+pub fn stream_url(id: &str) -> Option<(String, String, f64)> {
     let output = command("yt-dlp")
         .args([
             "-4",
@@ -102,7 +102,8 @@ pub fn stream_url(id: &str) -> Option<(String, String)> {
         .and_then(|e| e.as_str())
         .unwrap_or("m4a")
         .to_string();
-    Some((url, ext))
+    let duration = v.get("duration").and_then(|d| d.as_f64()).unwrap_or(0.0);
+    Some((url, ext, duration))
 }
 
 /// Fallback for when a direct URL will not play: pull the whole file into the
