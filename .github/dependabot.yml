@@ -5,6 +5,14 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
+    # The two crates the sound goes through. A major version of either rewrites
+    # the mixer or the decoder, and neither can be signed off without listening
+    # to the result, so they move by hand.
+    ignore:
+      - dependency-name: cpal
+        update-types: [version-update:semver-major]
+      - dependency-name: symphonia
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
