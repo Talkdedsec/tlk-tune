@@ -779,9 +779,14 @@ impl App {
         std::thread::spawn(move || {
             // Direct streaming first; a full download is the fallback for
             // hosts or formats that refuse range requests.
-            if let Some((url, hint)) = online::stream_url(&result.id) {
+            if let Some((url, hint, duration)) = online::stream_url(&result.id) {
                 let source = Source::Remote { url, hint };
-                if let Some(info) = decoder::probe_source(&source) {
+                if let Some(mut info) = decoder::probe_source(&source) {
+                    // Opus and webm streams often carry no frame count, and a
+                    // buffer sized from a guess would cut the track short.
+                    if info.duration <= 0.0 {
+                        info.duration = duration;
+                    }
                     let _ = tx.send(Message::Resolved {
                         source,
                         title: result.title,
