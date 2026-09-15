@@ -1533,8 +1533,15 @@ impl App {
 
     /// Renders a single frame with the library loaded but nothing playing.
     /// Useful for checking a colour scheme without launching the player.
-    pub fn preview(&mut self, width: usize, query: &str) -> String {
+    /// One frame, exactly as it would look on screen. `screen` picks between
+    /// the player, the settings and the help overlay; an empty string is the
+    /// player.
+    pub fn preview(&mut self, width: usize, rows: usize, query: &str, screen: &str) -> String {
         self.last_width = width as i32;
+        if rows > 0 {
+            self.last_height = rows.max(12);
+            self.fit_to_height(self.last_height);
+        }
         self.tracks = local::scan(&self.roots());
         self.last_local_query = query.to_string();
         self.refresh_view();
@@ -1550,15 +1557,56 @@ impl App {
                 );
             }
         }
-        if let Some(track) = self.view.first().cloned() {
-            let source = Source::File(track.path);
+        // The real start restores the last session, so a preview that skips it
+        // is not the frame anyone actually sees.
+        let saved = session::load();
+        let restored = saved
+            .track
+            .as_ref()
+            .map(PathBuf::from)
+            .filter(|p| p.exists());
+        self.mode = match screen {
+            "settings" => Mode::Settings,
+            "help" => Mode::Help,
+            _ => Mode::Browse,
+        };
+        if let Some(track) = restored {
+            self.start_local(track);
+            // Seeking only reaches what has been decoded.
+            let target = saved.position.max(0.0);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
+            while std::time::Instant::now() < deadline {
+                self.player.seek_to(target);
+                if self.player.elapsed() >= target - 0.5 {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(40));
+            }
+            self.player.set_paused(true);
+        } else if let Some(track) = self.view.first().map(|t| t.path.clone()) {
+            let source = Source::File(track);
             self.describe(&source, "", None);
             if self.cfg.show_album_art {
-                self.artwork = decoder::artwork(&source).and_then(|bytes| {
-                    artwork::render(&bytes, self.disk.width(), self.disk.height())
-                });
+                self.artwork = decoder::artwork(&source)
+                    .or_else(|| artwork::beside_the_track(&source))
+                    .and_then(|bytes| {
+                        artwork::render(&bytes, self.disk.width(), self.disk.height())
+                    });
             }
         }
+        // The cover, the waveform and the lyrics all arrive on their own
+        // threads; a frame taken before they land is not the one the window
+        // settles on.
+        let settled = std::time::Instant::now() + std::time::Duration::from_secs(8);
+        while std::time::Instant::now() < settled {
+            self.drain_messages();
+            if self.waveform_ready && self.lyrics_status.is_empty() && self.artwork.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(60));
+        }
+        // The waveform sweeps in over the first moments after it is built.
+        std::thread::sleep(std::time::Duration::from_millis(800));
         self.render_frame(width)
     }
 
