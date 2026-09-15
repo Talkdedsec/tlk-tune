@@ -1098,9 +1098,10 @@ impl App {
 
     /// Renders a single frame with the library loaded but nothing playing.
     /// Useful for checking a colour scheme without launching the player.
-    pub fn preview(&mut self, width: usize) -> String {
+    pub fn preview(&mut self, width: usize, query: &str) -> String {
         self.last_width = width as i32;
         self.tracks = local::scan(&self.roots());
+        self.last_local_query = query.to_string();
         self.refresh_view();
         for track in self.view.iter().take(LIST_ROWS) {
             if let Some(info) = decoder::probe(&track.path) {

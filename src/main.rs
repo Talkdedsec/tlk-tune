@@ -19,13 +19,15 @@ fn main() {
                 .and_then(|w| w.parse::<usize>().ok())
                 .unwrap_or(155)
                 .clamp(40, 200);
-            print!("{}", app::App::new().preview(width));
+            let query = args.get(2).cloned().unwrap_or_default();
+            print!("{}", app::App::new().preview(width, &query));
         }
         Some("--version") => println!("tlk-tune {}", env!("CARGO_PKG_VERSION")),
         Some("--help") | Some("-h") => {
             println!("tlk-tune {}", env!("CARGO_PKG_VERSION"));
             println!("  tlk-tune              start the player");
-            println!("  tlk-tune --preview N  render one frame at width N and exit");
+            println!("  tlk-tune --preview N [query]");
+            println!("                        render one frame at width N and exit");
             println!("  tlk-tune --version");
         }
         _ => app::App::new().run(),

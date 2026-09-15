@@ -200,14 +200,57 @@ pub fn sort(tracks: &mut [LocalTrack], mode: SortMode, artist_of: impl Fn(&Local
     }
 }
 
+/// Letters that a keyboard makes awkward to type, and what they are typed as.
+/// Without this a library full of "Oğuzhan" and "Dünya" is unsearchable unless
+/// every accent is entered exactly.
+const FOLDS: [(&str, char); 21] = [
+    ("àáâãäåāăą", 'a'),
+    ("æ", 'a'),
+    ("çćĉċč", 'c'),
+    ("ďđ", 'd'),
+    ("èéêëēĕėęě", 'e'),
+    ("ĝğġģ", 'g'),
+    ("ĥħ", 'h'),
+    ("ìíîïĩīĭįı", 'i'),
+    ("ĵ", 'j'),
+    ("ķ", 'k'),
+    ("ĺļľłŀ", 'l'),
+    ("ñńņňŉ", 'n'),
+    ("òóôõöøōŏő", 'o'),
+    ("œ", 'o'),
+    ("ŕŗř", 'r'),
+    ("śŝşšß", 's'),
+    ("ţťŧ", 't'),
+    ("ùúûüũūŭůűų", 'u'),
+    ("ŵ", 'w'),
+    ("ýÿŷ", 'y'),
+    ("źżž", 'z'),
+];
+
+/// Lowercases and strips accents so typing plain ASCII finds anything.
+pub fn fold(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.to_lowercase().chars() {
+        // `İ` lowercases to `i` plus a combining dot; drop the marks.
+        if ('\u{0300}'..='\u{036F}').contains(&c) {
+            continue;
+        }
+        match FOLDS.iter().find(|(set, _)| set.contains(c)) {
+            Some((_, base)) => out.push(*base),
+            None => out.push(c),
+        }
+    }
+    out
+}
+
 /// Subsequence-aware score used by the search box: an exact substring beats a
 /// prefix, which beats scattered letters. Returns 0 when nothing matches.
 pub fn match_score(query: &str, target: &str) -> f64 {
     if query.is_empty() {
         return 1.0;
     }
-    let q = query.to_lowercase();
-    let t = target.to_lowercase();
+    let q = fold(query);
+    let t = fold(target);
     if t == q {
         return 1000.0;
     }
@@ -303,5 +346,34 @@ mod tests {
     fn scoring_prefers_a_substring_over_scattered_letters() {
         assert!(match_score("gold", "golden hour") > match_score("gold", "go loud"));
         assert_eq!(match_score("zzz", "abc"), 0.0);
+    }
+
+    #[test]
+    fn plain_ascii_finds_accented_titles() {
+        for (query, title) in [
+            ("oguzhan", "004 - Oğuzhan Koç - Ayy"),
+            ("dunya", "002 - KADR - Dünya Boştur Lo"),
+            ("bostur", "002 - KADR - Dünya Boştur Lo"),
+            ("nalbantoglu", "005 - EMRE NALBANTOĞLU"),
+            ("sufri", "001 - Eslabon Armado - Jugaste y Sufrí"),
+            ("istanbul", "İstanbul Geceleri"),
+            ("cigdem", "ÇİĞDEM"),
+        ] {
+            assert!(
+                match_score(query, title) > 0.0,
+                "{query:?} did not find {title:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn typing_the_accents_still_works() {
+        assert!(match_score("Oğuzhan", "004 - Oğuzhan Koç - Ayy") > 0.0);
+        assert!(match_score("dünya", "002 - KADR - Dünya Boştur Lo") > 0.0);
+    }
+
+    #[test]
+    fn folding_does_not_merge_unrelated_words() {
+        assert_eq!(match_score("zzz", "Dünya Boştur"), 0.0);
     }
 }

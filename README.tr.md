@@ -21,7 +21,8 @@ tlk-tune
 - Renk geçişli dönen plak.
 - Senkron sözler, aktif kelime vurgusuyla; yanındaki `.lrc` dosyasından ya da
   LRCLIB'den.
-- Sıra, karıştır, tekrarla, klasör filtresi, bulanık arama.
+- Sıra, karıştır, tekrarla, klasör filtresi ve aksan tanımayan bulanık arama:
+  `oguzhan` yazınca `Oğuzhan`, `dunya` yazınca `Dünya` geliyor.
 - `yt-dlp` PATH'teyse çevrimiçi arama ve akış; olmasa da geri kalanı çalışır.
 - Türkçe ve İngilizce arayüz.
 - Uygulama içi ayar ekranı: her renk, anahtar, animasyon, müzik klasörü, ses
@@ -141,7 +142,8 @@ sonucu mp3 olarak ilk müzik klasörüne kaydeder.
 ## Diğer bayraklar
 
 ```
-tlk-tune --preview 155   155 sütun genişliğinde tek kare basıp çıkar
+tlk-tune --preview 155          155 sütun genişliğinde tek kare basıp çıkar
+tlk-tune --preview 155 oguzhan  aynı kareyi arama uygulanmış hâlde basar
 tlk-tune --version
 ```
 

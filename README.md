@@ -20,7 +20,8 @@ tlk-tune
 - Braille waveform across the progress bar, built from the decoded PCM.
 - Spinning record with a colour gradient.
 - Synced lyrics with active-word highlighting, from a sidecar `.lrc` or LRCLIB.
-- Queue, shuffle, repeat, folder filter, fuzzy search.
+- Queue, shuffle, repeat, folder filter, and a fuzzy search that ignores
+  accents, so `oguzhan` finds `Oguzhan` and `dunya` finds `Dunya`.
 - Online search and streaming when `yt-dlp` is on PATH; everything else works
   without it.
 - English and Turkish interface.
@@ -142,7 +143,8 @@ folder.
 ## Other flags
 
 ```
-tlk-tune --preview 155   render one frame at width 155 and exit
+tlk-tune --preview 155          render one frame at width 155 and exit
+tlk-tune --preview 155 oguzhan  render that frame with a search applied
 tlk-tune --version
 ```
 
