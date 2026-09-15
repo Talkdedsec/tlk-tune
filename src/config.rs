@@ -166,7 +166,7 @@ pub const LYRIC_ANIMATIONS: [&str; 5] = [
 ];
 pub const LANGUAGES: [&str; 2] = ["en", "tr"];
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Config {
     pub language: Language,
 
@@ -441,10 +441,14 @@ fn parse_font_block(body: &str, map: &mut FontMap) {
 }
 
 pub fn load() -> Config {
+    match fs::read_to_string(config_path()) {
+        Ok(text) => parse(&text),
+        Err(_) => Config::default(),
+    }
+}
+
+pub fn parse(text: &str) -> Config {
     let mut c = Config::default();
-    let Ok(text) = fs::read_to_string(config_path()) else {
-        return c;
-    };
 
     let lines: Vec<&str> = text.lines().collect();
     let mut i = 0usize;
@@ -660,11 +664,21 @@ pub fn save(c: &Config) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
+    fs::write(&path, render(c, &path.display().to_string()))
+}
+
+/// Everything the parser understands has to come back out here, or quitting
+/// would quietly throw the setting away.
+pub fn render(c: &Config, location: &str) -> String {
     let tf = |v: bool| if v { "true" } else { "false" };
     let mut o = String::new();
     o.push_str("# tlk-tune configuration\n");
-    o.push_str(&format!("# Location: {}\n\n", path.display()));
-    o.push_str(&format!("Language={}\n\n", c.language.code()));
+    o.push_str(&format!("# Location: {}\n\n", location));
+    o.push_str(&format!("Language={}\n", c.language.code()));
+    o.push_str(&format!(
+        "OutputDevice={}\n\n",
+        c.output_device.clone().unwrap_or_default()
+    ));
 
     o.push_str("##-------------------------------------------\n");
     o.push_str("##              PANEL 1: COLORS\n");
@@ -678,9 +692,12 @@ pub fn save(c: &Config) -> std::io::Result<()> {
         ("ColorMetadataKey", &c.meta_key),
         ("ColorMetadataVal", &c.meta_val),
         ("ColorVizLeft", &c.viz_left),
+        ("ColorVizCenter", &c.viz_centre),
         ("ColorVizRight", &c.viz_right),
         ("ColorProgressBarPlayed", &c.progress_played),
         ("ColorProgressBarPending", &c.progress_pending),
+        ("ColorProgressBarTimestamp", &c.progress_time),
+        ("ColorButton", &c.button),
     ] {
         o.push_str(&format!("{}={}\n", k, v));
     }
@@ -770,6 +787,22 @@ pub fn save(c: &Config) -> std::io::Result<()> {
         "LyricsAnimation={}\n## full , word by word , letter by letter\n## active line only , active word only\n",
         LYRIC_ANIMATIONS[c.lyric_animation.clamp(0, 4) as usize]
     ));
+    o.push_str(&format!(
+        "CrossfadeMs={}\n## 0 to 12000, 0 is gapless\n",
+        c.crossfade_ms
+    ));
+    o.push_str(&format!(
+        "Normalize={}\nNormalizeTarget={:.1}\n## EBU R128, -30 to -6 LUFS\n",
+        tf(c.normalize),
+        c.normalize_target
+    ));
+    o.push_str(&format!(
+        "Equalizer={}\n## 10 bands, 31Hz to 16kHz, -12 to +12 dB\n",
+        c.eq.iter()
+            .map(|g| format!("{:.1}", g))
+            .collect::<Vec<_>>()
+            .join(",")
+    ));
 
     o.push_str("\n##-------------------------------------------\n");
     o.push_str("##             PANEL 4: REFERENCE\n");
@@ -806,6 +839,134 @@ pub fn save(c: &Config) -> std::io::Result<()> {
         o.push('\n');
     }
     o.push_str("};\n");
+    o
+}
 
-    fs::write(&path, o)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A config where nothing is left at its default, so a field that save
+    /// forgets cannot hide behind matching the default on the way back.
+    fn nothing_default() -> Config {
+        let mut c = Config {
+            language: Language::Tr,
+            output_device: Some("Headphones (USB)".into()),
+            ..Config::default()
+        };
+
+        c.show_disk = false;
+        c.show_album_art = false;
+        c.show_buttons = false;
+        c.show_queue = false;
+        c.show_waveform = false;
+        c.show_lyrics = false;
+        c.show_lyric_ball = true;
+        c.show_visualizer = false;
+        c.normalize = false;
+
+        c.lyric_alignment = 2;
+        c.lyric_animation = 4;
+        c.viz_fluidity = 3;
+        c.viz_decay = 7;
+        c.viz_viscosity = 9;
+        c.waveform_smooth = true;
+        c.disk_speed = 0.35;
+        c.play_mode = 2;
+        c.crossfade_ms = 3250;
+        c.normalize_target = -14.0;
+        c.eq = [1.5, -2.0, 3.0, -4.5, 5.0, -6.0, 7.5, -8.0, 9.0, -10.5];
+
+        c.corner_tl = "+".into();
+        c.corner_tr = "+".into();
+        c.corner_bl = "+".into();
+        c.corner_br = "+".into();
+        c.edge_v = "|".into();
+        c.edge_h = "-".into();
+        c.meta_separator = "::".into();
+        c.list_separator = "/".into();
+
+        for (n, field) in [
+            &mut c.border,
+            &mut c.border_bottom,
+            &mut c.disk,
+            &mut c.disk_end,
+            &mut c.meta_key,
+            &mut c.meta_val,
+            &mut c.viz_left,
+            &mut c.viz_centre,
+            &mut c.viz_right,
+            &mut c.progress_played,
+            &mut c.progress_pending,
+            &mut c.progress_time,
+            &mut c.list_fg,
+            &mut c.list_bg,
+            &mut c.list_playing_fg,
+            &mut c.list_playing_bg,
+            &mut c.list_cursor_fg,
+            &mut c.list_cursor_bg,
+            &mut c.list_liked_fg,
+            &mut c.queue_fg,
+            &mut c.queue_bg,
+            &mut c.queue_playing_fg,
+            &mut c.queue_playing_bg,
+            &mut c.queue_cursor_fg,
+            &mut c.queue_cursor_bg,
+            &mut c.lyric_fg,
+            &mut c.lyric_bg,
+            &mut c.lyric_line_fg,
+            &mut c.lyric_line_bg,
+            &mut c.lyric_word_fg,
+            &mut c.lyric_word_bg,
+            &mut c.button,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            *field = (20 + n).to_string();
+        }
+
+        c.music_paths = vec!["E:/Muzik".into(), "D:/Lists/night.m3u".into()];
+        c.keys
+            .insert("HKeyTogglePlayPause".to_string(), "z".to_string());
+        c.about = vec!["about line one".into(), "about line two".into()];
+        c
+    }
+
+    #[test]
+    fn saving_and_loading_keeps_every_setting() {
+        let original = nothing_default();
+        let round_tripped = parse(&render(&original, "test"));
+        assert!(
+            round_tripped == original,
+            "a setting did not survive the round trip"
+        );
+    }
+
+    #[test]
+    fn an_empty_file_is_the_default() {
+        assert!(parse("") == Config::default());
+        assert!(parse("# only a comment\n\n") == Config::default());
+    }
+
+    #[test]
+    fn unknown_keys_and_junk_are_ignored() {
+        let c = parse("NoSuchSetting=7\nnot even a pair\nColorBorderTop=42\n");
+        assert_eq!(c.border, "42");
+        assert_eq!(c.border_bottom, Config::default().border_bottom);
+    }
+
+    #[test]
+    fn out_of_range_values_are_clamped() {
+        let c = parse("CrossfadeMs=99999\nNormalizeTarget=-90\nEqualizer=99,-99,0,0,0,0,0,0,0,0\n");
+        assert_eq!(c.crossfade_ms, 12_000);
+        assert_eq!(c.normalize_target, -30.0);
+        assert_eq!(c.eq[0], 12.0);
+        assert_eq!(c.eq[1], -12.0);
+    }
+
+    #[test]
+    fn a_colour_may_carry_a_brightness_it_does_not_use() {
+        assert_eq!(parse("ColorBorderTop=39,100\n").border, "39");
+    }
 }
