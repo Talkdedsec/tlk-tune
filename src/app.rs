@@ -28,6 +28,18 @@ use crate::visual::{artwork, waveform};
 
 /// The reference layout shows eight rows. The list only ever shrinks from
 /// there, so a short window degrades instead of scrolling the top away.
+/// Whether the next track should start now so the two overlap. Waiting for
+/// the track to finish would only ever mix the new one into silence, which is
+/// not a crossfade.
+pub fn crossfade_due(elapsed: f64, total: f64, fade: f64, play_mode: i32) -> bool {
+    // Nothing to fade into when the player is about to stop, and a fade longer
+    // than half the track would swallow it.
+    if fade <= 0.0 || play_mode == 3 || total <= fade * 2.0 {
+        return false;
+    }
+    elapsed >= total - fade
+}
+
 pub const LIST_ROWS: usize = 8;
 pub const MIN_LIST_ROWS: usize = 3;
 const ANGULAR_VELOCITY: f64 = (2.0 * std::f64::consts::PI / 48.0) / 0.035;
@@ -183,6 +195,7 @@ pub struct App {
     sleep_until: Option<Instant>,
     title_shown: String,
     play_counted: bool,
+    crossfade_started: bool,
 
     tx: Sender<Message>,
     rx: Receiver<Message>,
@@ -310,6 +323,7 @@ impl App {
             sleep_until: None,
             title_shown: String::new(),
             play_counted: false,
+            crossfade_started: false,
 
             tx,
             rx,
@@ -615,6 +629,7 @@ impl App {
         self.lyrics_status = self.lang.fetching_lyrics.to_string();
         self.lyrics_status_at = Instant::now();
         self.play_counted = false;
+        self.crossfade_started = false;
         self.spectrum.reset();
         self.apply_track_gain();
         info
@@ -1066,6 +1081,22 @@ impl App {
             ViewMode::Liked => self.lang.view_liked,
             ViewMode::Played => self.lang.view_played,
             ViewMode::Recent => self.lang.view_recent,
+        }
+    }
+
+    fn maybe_start_crossfade(&mut self) {
+        if !self.has_track || self.crossfade_started {
+            return;
+        }
+        let due = crossfade_due(
+            self.player.elapsed(),
+            self.total_sec,
+            self.cfg.crossfade_ms as f64 / 1000.0,
+            self.cfg.play_mode,
+        );
+        if due {
+            self.crossfade_started = true;
+            self.advance();
         }
     }
 
@@ -1688,6 +1719,7 @@ impl App {
 
             self.count_play();
             self.check_sleep_timer();
+            self.maybe_start_crossfade();
             if self.has_track && self.player.finished() {
                 self.advance();
             }
@@ -1698,7 +1730,12 @@ impl App {
 
             let width = console.cols().clamp(40, 200) as usize;
             self.last_height = console.rows().max(12) as usize;
+            let rows_before = self.list_rows;
             self.fit_to_height(self.last_height);
+            if self.list_rows != rows_before {
+                self.clamp_scroll();
+                self.clamp_queue_scroll();
+            }
             self.refresh_window_title(&console);
             let frame = self.render_frame(width);
             console.write(&frame);
@@ -1710,5 +1747,31 @@ impl App {
         self.player.close();
         console.close();
         let _ = config::save(&self.cfg);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_crossfade_starts_before_the_track_ends() {
+        assert!(!crossfade_due(100.0, 200.0, 6.0, 0));
+        assert!(!crossfade_due(193.9, 200.0, 6.0, 0));
+        assert!(crossfade_due(194.0, 200.0, 6.0, 0));
+        assert!(crossfade_due(199.0, 200.0, 6.0, 0));
+    }
+
+    #[test]
+    fn gapless_and_stop_never_trigger_one() {
+        assert!(!crossfade_due(199.0, 200.0, 0.0, 0));
+        assert!(!crossfade_due(199.0, 200.0, 6.0, 3));
+    }
+
+    #[test]
+    fn a_fade_longer_than_the_track_is_ignored() {
+        assert!(!crossfade_due(4.0, 5.0, 6.0, 0));
+        assert!(!crossfade_due(9.0, 10.0, 6.0, 0));
+        assert!(crossfade_due(9.0, 14.0, 6.0, 0));
     }
 }
