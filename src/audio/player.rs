@@ -83,7 +83,9 @@ impl Player {
             lost: AtomicBool::new(false),
             sink: ArcSwapOption::empty(),
         });
-        let mut player = Player {
+        // The device is opened on the first play, not here: a run that never
+        // plays anything has no business holding an output open.
+        Player {
             stream: None,
             mix,
             output,
@@ -91,9 +93,7 @@ impl Player {
             volume: 70,
             crossfade_ms: 0,
             gains: [0.0; 10],
-        };
-        player.open_stream();
-        player
+        }
     }
 
     pub fn output(&self) -> &Output {

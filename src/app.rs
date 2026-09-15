@@ -118,6 +118,7 @@ pub enum Message {
         source: Source,
         title: String,
         artist: String,
+        info: Box<TrackInfo>,
     },
     ResolveFailed,
     Lyrics(Lyrics),
@@ -546,12 +547,21 @@ impl App {
 
     /// Fills the metadata panel from the stream header and returns what the
     /// decoder found, so the caller can size the playback buffer.
-    fn describe(&mut self, source: &Source, fallback_title: &str) -> TrackInfo {
-        let info = decoder::probe_source(source).unwrap_or(TrackInfo {
-            sample_rate: 44100,
-            channels: 2,
-            ..Default::default()
-        });
+    fn describe(
+        &mut self,
+        source: &Source,
+        fallback_title: &str,
+        known: Option<TrackInfo>,
+    ) -> TrackInfo {
+        // A stream was already probed to decide it was playable; opening it
+        // again would mean another round of range requests for nothing.
+        let info = known
+            .or_else(|| decoder::probe_source(source))
+            .unwrap_or(TrackInfo {
+                sample_rate: 44100,
+                channels: 2,
+                ..Default::default()
+            });
 
         let (title, artist, format, size, location) = match source {
             Source::File(path) => {
@@ -651,8 +661,8 @@ impl App {
         self.player.set_track_gain_db(db);
     }
 
-    pub fn start(&mut self, source: Source, fallback_title: &str) {
-        let info = self.describe(&source, fallback_title);
+    pub fn start(&mut self, source: Source, fallback_title: &str, known: Option<TrackInfo>) {
+        let info = self.describe(&source, fallback_title, known);
         let title = self.meta.name.clone();
         let artist = self.meta.artist.clone();
 
@@ -702,7 +712,10 @@ impl App {
             }
         });
 
-        if self.cfg.show_album_art {
+        // Artwork is only worth a second open for a local file; over HTTP it
+        // would mean another pass over the container for a picture that
+        // streamed audio rarely carries.
+        if self.cfg.show_album_art && matches!(source, Source::File(_)) {
             let art_source = source.clone();
             let art_tx = self.tx.clone();
             let cols = self.disk.width();
@@ -733,7 +746,7 @@ impl App {
     }
 
     pub fn start_local(&mut self, path: PathBuf) {
-        self.start(Source::File(path), "");
+        self.start(Source::File(path), "", None);
     }
 
     fn start_online(&mut self, result: OnlineResult) {
@@ -746,21 +759,24 @@ impl App {
             // hosts or formats that refuse range requests.
             if let Some((url, hint)) = online::stream_url(&result.id) {
                 let source = Source::Remote { url, hint };
-                if decoder::probe_source(&source).is_some() {
+                if let Some(info) = decoder::probe_source(&source) {
                     let _ = tx.send(Message::Resolved {
                         source,
                         title: result.title,
                         artist: result.uploader,
+                        info: Box::new(info),
                     });
                     return;
                 }
             }
             match online::resolve(&result.id) {
                 Some(path) => {
+                    let info = decoder::probe(&path).unwrap_or_default();
                     let _ = tx.send(Message::Resolved {
                         source: Source::File(path),
                         title: result.title,
                         artist: result.uploader,
+                        info: Box::new(info),
                     });
                 }
                 None => {
@@ -1444,10 +1460,11 @@ impl App {
                     source,
                     title,
                     artist,
+                    info,
                 } => {
                     self.loading = false;
                     self.status.clear();
-                    self.start(source, &title);
+                    self.start(source, &title, Some(*info));
                     if !title.is_empty() {
                         self.meta.name = title;
                     }
@@ -1508,7 +1525,7 @@ impl App {
         }
         if let Some(track) = self.view.first().cloned() {
             let source = Source::File(track.path);
-            self.describe(&source, "");
+            self.describe(&source, "", None);
             if self.cfg.show_album_art {
                 self.artwork = decoder::artwork(&source).and_then(|bytes| {
                     artwork::render(&bytes, self.disk.width(), self.disk.height())
