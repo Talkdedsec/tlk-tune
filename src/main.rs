@@ -11,6 +11,15 @@ mod ui;
 mod visual;
 
 fn main() {
+    run();
+    // Everything that needed saving has been saved and the terminal is back.
+    // Leaving by hand means an audio backend that stalls while tearing its
+    // own threads down cannot keep the process alive afterwards.
+    std::io::Write::flush(&mut std::io::stdout()).ok();
+    std::process::exit(0);
+}
+
+fn run() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("--preview") => {
