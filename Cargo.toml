@@ -3,6 +3,15 @@ name = "tlk-tune"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
+description = "Terminal music player for Windows: native decoding, album art, equaliser, synced lyrics, mouse and keyboard."
+authors = ["Talkdedsec <292909750+Talkdedsec@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/Talkdedsec/tlk-tune"
+homepage = "https://github.com/Talkdedsec/tlk-tune"
+keywords = ["music", "player", "terminal", "tui", "audio"]
+categories = ["command-line-utilities", "multimedia::audio"]
+exclude = ["/.github", "/assets/*.png"]
 
 [[bin]]
 name = "tlk-tune"

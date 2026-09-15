@@ -1,0 +1,41 @@
+name: Bug report
+description: Something behaves wrongly
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `tlk-tune --version`
+      placeholder: tlk-tune 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      placeholder: Windows Terminal 1.21, Cascadia Mono, 155x40
+    validations:
+      required: true
+  - type: textarea
+    id: frame
+    attributes:
+      label: Frame
+      description: >
+        For anything that looks wrong on screen, paste the output of
+        `tlk-tune --preview 155`.
+      render: text
+  - type: textarea
+    id: track
+    attributes:
+      label: The track
+      description: >
+        If one file in particular is involved, its format, sample rate and
+        length. No need to attach it.
