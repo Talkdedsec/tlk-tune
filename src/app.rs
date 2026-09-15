@@ -26,7 +26,10 @@ use crate::visual::spectrum::Spectrum;
 use crate::visual::sphere::Sphere;
 use crate::visual::{artwork, waveform};
 
+/// The reference layout shows eight rows. The list only ever shrinks from
+/// there, so a short window degrades instead of scrolling the top away.
 pub const LIST_ROWS: usize = 8;
+pub const MIN_LIST_ROWS: usize = 3;
 const ANGULAR_VELOCITY: f64 = (2.0 * std::f64::consts::PI / 48.0) / 0.035;
 const FRAME: Duration = Duration::from_millis(40);
 
@@ -36,6 +39,7 @@ pub enum Mode {
     Search,
     Settings,
     ColorEdit,
+    Help,
 }
 
 /// Which slice of the library the list shows. A flat folder of several
@@ -171,6 +175,12 @@ pub struct App {
 
     pub quit: bool,
     pub last_width: i32,
+    pub list_rows: usize,
+    pub compact: bool,
+    pub last_height: usize,
+    sleep_minutes: u32,
+    sleep_until: Option<Instant>,
+    title_shown: String,
     play_counted: bool,
 
     tx: Sender<Message>,
@@ -292,6 +302,12 @@ impl App {
 
             quit: false,
             last_width: 155,
+            list_rows: LIST_ROWS,
+            compact: false,
+            last_height: 40,
+            sleep_minutes: 0,
+            sleep_until: None,
+            title_shown: String::new(),
             play_counted: false,
 
             tx,
@@ -483,23 +499,25 @@ impl App {
     }
 
     fn clamp_scroll(&mut self) {
-        let max_scroll = self.list_len().saturating_sub(LIST_ROWS);
+        let rows = self.list_rows.max(1);
+        let max_scroll = self.list_len().saturating_sub(rows);
         if self.selected < self.scroll {
             self.scroll = self.selected;
         }
-        if self.selected >= self.scroll + LIST_ROWS {
-            self.scroll = self.selected + 1 - LIST_ROWS;
+        if self.selected >= self.scroll + rows {
+            self.scroll = self.selected + 1 - rows;
         }
         self.scroll = self.scroll.min(max_scroll);
     }
 
     fn clamp_queue_scroll(&mut self) {
-        let max_scroll = self.queue.len().saturating_sub(LIST_ROWS);
+        let rows = self.list_rows.max(1);
+        let max_scroll = self.queue.len().saturating_sub(rows);
         if self.queue_selected < self.queue_scroll {
             self.queue_scroll = self.queue_selected;
         }
-        if self.queue_selected >= self.queue_scroll + LIST_ROWS {
-            self.queue_scroll = self.queue_selected + 1 - LIST_ROWS;
+        if self.queue_selected >= self.queue_scroll + rows {
+            self.queue_scroll = self.queue_selected + 1 - rows;
         }
         self.queue_scroll = self.queue_scroll.min(max_scroll);
     }
@@ -969,6 +987,11 @@ impl App {
             self.move_queue_entry(1);
         } else if key == Key::Char('g') {
             self.filter_to_artist();
+        } else if key == Key::Char('t') {
+            self.cycle_sleep_timer();
+        } else if key == Key::Char('?') {
+            self.mode = Mode::Help;
+            self.force_redraw = true;
         } else if key == bound("HKeyClearFilter") {
             self.clear_filter();
         } else if key == bound("HKeyDownloadStream") {
@@ -1037,6 +1060,61 @@ impl App {
             ViewMode::Liked => self.lang.view_liked,
             ViewMode::Played => self.lang.view_played,
             ViewMode::Recent => self.lang.view_recent,
+        }
+    }
+
+    /// Off, then a quarter hour at a time up to an hour and a half.
+    fn cycle_sleep_timer(&mut self) {
+        const STEPS: [u32; 6] = [0, 15, 30, 45, 60, 90];
+        let current = STEPS
+            .iter()
+            .position(|m| *m == self.sleep_minutes)
+            .unwrap_or(0);
+        self.sleep_minutes = STEPS[(current + 1) % STEPS.len()];
+
+        if self.sleep_minutes == 0 {
+            self.sleep_until = None;
+            self.status = self.lang.sleep_off.to_string();
+        } else {
+            self.sleep_until =
+                Some(Instant::now() + Duration::from_secs(self.sleep_minutes as u64 * 60));
+            self.status = format!("{} {} min", self.lang.sleep_set, self.sleep_minutes);
+        }
+    }
+
+    fn check_sleep_timer(&mut self) {
+        let Some(deadline) = self.sleep_until else {
+            return;
+        };
+        if Instant::now() < deadline {
+            return;
+        }
+        self.sleep_until = None;
+        self.sleep_minutes = 0;
+        self.player.set_paused(true);
+        self.status = self.lang.sleep_done.to_string();
+    }
+
+    /// Keeps the window title in step with what is playing, so the taskbar
+    /// says something useful while the terminal is behind other windows.
+    fn refresh_window_title(&mut self, console: &Console) {
+        let wanted = if self.has_track {
+            let artist = self.meta.artist.trim();
+            if artist.is_empty() {
+                format!("{} \u{b7} tlk-tune", self.meta.name.trim())
+            } else {
+                format!(
+                    "{} \u{2014} {} \u{b7} tlk-tune",
+                    artist,
+                    self.meta.name.trim()
+                )
+            }
+        } else {
+            "tlk-tune".to_string()
+        };
+        if wanted != self.title_shown {
+            console.set_title(&wanted);
+            self.title_shown = wanted;
         }
     }
 
@@ -1232,11 +1310,11 @@ impl App {
                     && row >= layout.rows_y.0
                     && row <= layout.rows_y.1;
                 if over_queue {
-                    let max = self.queue.len().saturating_sub(LIST_ROWS) as i32;
+                    let max = self.queue.len().saturating_sub(self.list_rows) as i32;
                     self.queue_scroll =
                         (self.queue_scroll as i32 + step).clamp(0, max.max(0)) as usize;
                 } else {
-                    let max = self.list_len().saturating_sub(LIST_ROWS) as i32;
+                    let max = self.list_len().saturating_sub(self.list_rows) as i32;
                     self.scroll = (self.scroll as i32 + step).clamp(0, max.max(0)) as usize;
                 }
             }
@@ -1383,12 +1461,30 @@ impl App {
         self.render_frame(width)
     }
 
+    /// Fits the layout to the window. Panels are dropped in the order they
+    /// matter least, rather than letting the frame run off the top.
+    pub fn fit_to_height(&mut self, height: usize) {
+        let chrome = 5 + 3 + 2 + 2; // progress, search, list borders, status
+        let with_metadata = chrome + self.disk.height() + 2;
+
+        if height >= with_metadata + MIN_LIST_ROWS {
+            self.compact = false;
+            self.list_rows = (height - with_metadata).clamp(MIN_LIST_ROWS, LIST_ROWS);
+        } else {
+            self.compact = true;
+            self.list_rows = height
+                .saturating_sub(chrome)
+                .clamp(MIN_LIST_ROWS, LIST_ROWS);
+        }
+    }
+
     pub fn render_frame(&mut self, width: usize) -> String {
         let mode_id = match self.mode {
             Mode::Browse => 0,
             Mode::Search => 1,
             Mode::Settings => 2,
             Mode::ColorEdit => 3,
+            Mode::Help => 4,
         };
         let hard =
             width as i32 != self.last_width || mode_id != self.last_mode || self.force_redraw;
@@ -1396,6 +1492,9 @@ impl App {
         self.last_width = width as i32;
         self.last_mode = mode_id;
 
+        if self.mode == Mode::Help {
+            return ui::help::build(self, width, self.last_height);
+        }
         if matches!(self.mode, Mode::Settings | Mode::ColorEdit) {
             let player_height = ui::panels::player_height(self);
             return settings_screen::build(self, width.max(80), player_height);
@@ -1417,11 +1516,12 @@ impl App {
             frame.push('\n');
         }
 
+        let rows = self.list_rows;
         if self.cfg.show_queue {
             let list_w = width / 2;
             let queue_w = width - list_w;
-            let left = ui::panels::list(self, list_w, LIST_ROWS);
-            let right = ui::panels::queue(self, queue_w, LIST_ROWS);
+            let left = ui::panels::list(self, list_w, rows);
+            let right = ui::panels::queue(self, queue_w, rows);
             for i in 0..left.len().max(right.len()) {
                 let l = left.get(i).cloned().unwrap_or_else(|| " ".repeat(list_w));
                 let r = right.get(i).cloned().unwrap_or_else(|| " ".repeat(queue_w));
@@ -1430,7 +1530,7 @@ impl App {
                 frame.push('\n');
             }
         } else {
-            for line in ui::panels::list(self, width, LIST_ROWS) {
+            for line in ui::panels::list(self, width, rows) {
                 frame.push_str(&line);
                 frame.push('\n');
             }
@@ -1526,12 +1626,21 @@ impl App {
                         self.quit = true;
                         break;
                     }
+                    Input::Key(_) if self.mode == Mode::Help => {
+                        self.mode = Mode::Browse;
+                        self.force_redraw = true;
+                    }
                     Input::Key(key) => match self.mode {
                         Mode::Browse => self.handle_browse_key(key),
                         Mode::Search => self.handle_search_key(key),
+                        Mode::Help => {}
                         Mode::Settings | Mode::ColorEdit => settings_screen::handle_key(self, key),
                     },
                     Input::Resize => self.force_redraw = true,
+                    _ if self.mode == Mode::Help => {
+                        self.mode = Mode::Browse;
+                        self.force_redraw = true;
+                    }
                     other => self.handle_pointer(other),
                 }
             }
@@ -1550,6 +1659,7 @@ impl App {
             last_frame = now;
 
             self.count_play();
+            self.check_sleep_timer();
             if self.has_track && self.player.finished() {
                 self.advance();
             }
@@ -1559,6 +1669,9 @@ impl App {
             }
 
             let width = console.cols().clamp(40, 200) as usize;
+            self.last_height = console.rows().max(12) as usize;
+            self.fit_to_height(self.last_height);
+            self.refresh_window_title(&console);
             let frame = self.render_frame(width);
             console.write(&frame);
             std::thread::sleep(FRAME);

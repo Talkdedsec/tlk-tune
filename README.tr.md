@@ -28,6 +28,9 @@ tlk-tune
 - **10 bantlı ekolayzer**, hazır ayarlarla; ok tuşuyla ya da kaydırağa
   tıklayarak.
 - **Boşluksuz** parça geçişi, istenirse 12 saniyeye kadar çapraz geçiş.
+- Pencereye uyar: kısa terminalde liste küçülür, yer kalmazsa plak paneli
+  çekilir — kare yukarı kaçmaz.
+- Uyku zamanlayıcısı ve çalanı gösteren pencere başlığı.
 - **Ses eşitleme**, EBU R 128'e göre: her parça bir kez ölçülüp aynı yükseklikte
   çalınıyor, sert kırpma yerine yumuşak sınırlayıcı var.
 - **Beğeni, çalma sayısı ve görünümler**: `l` beğenir, `v` listeyi tümü /
@@ -80,6 +83,8 @@ cargo build --release
 | Görünümü değiştir | `v` |
 | Sanatçıya göre filtrele | `g` |
 | Sırayı yeniden dizle | `Shift+↑` / `Shift+↓` |
+| Uyku zamanlayıcısı | `t` |
+| Tüm tuşlar, ekranda | `?` |
 | Akışı indir | `y` |
 | Ayarlar | `s` |
 | Çıkış | `q` |

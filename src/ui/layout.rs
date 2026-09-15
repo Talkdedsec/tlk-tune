@@ -1,4 +1,4 @@
-use crate::app::{App, LIST_ROWS};
+use crate::app::App;
 
 /// Screen rectangles of the player view, in 1-based terminal coordinates.
 ///
@@ -24,17 +24,20 @@ const BUTTON_INNER: usize = 9;
 const BUTTON_TOTAL: usize = BUTTON_INNER + 4;
 
 pub fn layout_for(app: &App, width: usize) -> Layout {
-    let panel_h = app.disk.height();
+    let panel_h = if app.compact { 0 } else { app.disk.height() };
     let disk_w = if app.cfg.show_disk {
         app.disk.width()
     } else {
         0
     };
 
-    let panel_top = 1;
-    let panel_first = panel_top + 1;
-    let panel_last = panel_first + panel_h - 1;
-    let progress_top = panel_last + 2;
+    // In compact mode the metadata panel is not drawn at all, so the progress
+    // panel starts at the top and the disk has no rows to hit.
+    let (panel_first, panel_last, progress_top) = if app.compact {
+        (0, 0, 1)
+    } else {
+        (2, 1 + panel_h, 3 + panel_h)
+    };
 
     let side_w = if app.cfg.show_buttons {
         BUTTON_TOTAL * 3
@@ -85,7 +88,7 @@ pub fn layout_for(app: &App, width: usize) -> Layout {
         volume_y,
         search_y: search_top + 1,
         sigil_x: (width.saturating_sub(4), width),
-        rows_y: (list_top + 1, list_top + LIST_ROWS),
+        rows_y: (list_top + 1, list_top + app.list_rows.max(1)),
         list_x,
         queue_x,
     }
@@ -202,7 +205,10 @@ mod tests {
         let app = App::new();
         let l = layout_for(&app, 155);
         assert_eq!(probe(&app, 4, l.rows_y.0), Target::ListRow(0));
-        assert_eq!(probe(&app, 4, l.rows_y.1), Target::ListRow(LIST_ROWS - 1));
+        assert_eq!(
+            probe(&app, 4, l.rows_y.1),
+            Target::ListRow(app.list_rows - 1)
+        );
         assert_eq!(
             probe(&app, l.queue_x.0 + 4, l.rows_y.0),
             Target::QueueRow(0)
@@ -225,6 +231,36 @@ mod tests {
             probe(&app, l.disk_x.0 + 5, l.panel_y.0 + 5),
             Target::PlayPause
         );
+    }
+
+    #[test]
+    fn a_short_window_drops_the_metadata_panel() {
+        let mut app = App::new();
+
+        app.fit_to_height(40);
+        assert!(!app.compact);
+        assert_eq!(app.list_rows, crate::app::LIST_ROWS);
+
+        // 29 rows go on chrome and the record, so 34 still fits five entries.
+        app.fit_to_height(34);
+        assert!(!app.compact);
+        assert_eq!(app.list_rows, 5);
+
+        app.fit_to_height(30);
+        assert!(app.compact, "30 rows cannot hold the record and a list");
+
+        let l = layout_for(&app, 155);
+        assert_eq!(l.panel_y, (0, 0));
+        assert_eq!(hit(&l, l.wave_x.0, l.wave_y.0), Target::Seek(0));
+    }
+
+    #[test]
+    fn rows_follow_the_fitted_height() {
+        let mut app = App::new();
+        app.fit_to_height(31);
+        let l = layout_for(&app, 155);
+        assert_eq!(l.rows_y.1 - l.rows_y.0 + 1, app.list_rows);
+        assert_eq!(hit(&l, 4, l.rows_y.1), Target::ListRow(app.list_rows - 1));
     }
 }
 

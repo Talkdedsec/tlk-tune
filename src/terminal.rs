@@ -54,6 +54,10 @@ impl Console {
         terminal::size().map(|(w, _)| w as i32).unwrap_or(155)
     }
 
+    pub fn rows(&self) -> i32 {
+        terminal::size().map(|(_, h)| h as i32).unwrap_or(40)
+    }
+
     /// Returns one pending event, or `Input::None`. Never blocks.
     pub fn read(&self) -> Input {
         if !event::poll(Duration::from_millis(0)).unwrap_or(false) {
@@ -83,6 +87,15 @@ impl Console {
             Ok(Event::Resize(_, _)) => Input::Resize,
             _ => Input::None,
         }
+    }
+
+    /// Sets the window title through the terminal's own escape, which both
+    /// Windows Terminal and conhost honour.
+    pub fn set_title(&self, title: &str) {
+        let clean: String = title.chars().filter(|c| !c.is_control()).collect();
+        let mut out = io::stdout().lock();
+        let _ = write!(out, "\x1b]0;{}\x07", clean);
+        let _ = out.flush();
     }
 
     pub fn write(&self, frame: &str) {
