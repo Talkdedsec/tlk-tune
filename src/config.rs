@@ -235,6 +235,7 @@ pub struct Config {
     pub button: String,
 
     pub music_paths: Vec<String>,
+    pub output_device: Option<String>,
     pub keys: BTreeMap<String, String>,
 }
 
@@ -310,6 +311,7 @@ impl Default for Config {
             button: String::new(),
 
             music_paths: Vec::new(),
+            output_device: None,
             keys: BTreeMap::new(),
         };
         c.default_keys();
@@ -558,6 +560,10 @@ pub fn load() -> Config {
             "Seprator" | "Separator" => c.meta_separator = unquote(value),
             "ListSeparator" => c.list_separator = unquote(value),
 
+            "OutputDevice" => {
+                let name = unquote(value);
+                c.output_device = if name.is_empty() { None } else { Some(name) };
+            }
             "LocalMusicPath" => {
                 let p = unquote(value);
                 if !p.is_empty() {

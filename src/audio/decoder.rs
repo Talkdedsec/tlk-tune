@@ -1,16 +1,17 @@
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::errors::Error;
 use symphonia::core::formats::FormatOptions;
-use symphonia::core::io::MediaSourceStream;
+use symphonia::core::io::{MediaSource, MediaSourceStream};
 use symphonia::core::meta::{MetadataOptions, StandardTagKey};
-use symphonia::core::probe::Hint;
+use symphonia::core::probe::{Hint, ProbeResult};
 
 use super::buffer::PcmStream;
+use crate::source::http::HttpStream;
 
 #[derive(Clone, Default)]
 pub struct TrackInfo {
@@ -24,27 +25,54 @@ pub struct TrackInfo {
     pub bits: String,
 }
 
-fn hint_for(path: &Path) -> Hint {
-    let mut hint = Hint::new();
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        hint.with_extension(ext);
+/// Where the audio comes from. Both arms end up in the same decode loop, so a
+/// stream behaves exactly like a file once it is open.
+#[derive(Clone)]
+pub enum Source {
+    File(PathBuf),
+    Remote { url: String, hint: String },
+}
+
+impl Source {
+    fn open(&self) -> Option<ProbeResult> {
+        let (media, hint): (Box<dyn MediaSource>, Hint) = match self {
+            Source::File(path) => {
+                let mut hint = Hint::new();
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    hint.with_extension(ext);
+                }
+                (Box::new(File::open(path).ok()?), hint)
+            }
+            Source::Remote { url, hint } => {
+                let mut h = Hint::new();
+                if !hint.is_empty() {
+                    h.with_extension(hint);
+                }
+                (Box::new(HttpStream::open(url)?), h)
+            }
+        };
+
+        symphonia::default::get_probe()
+            .format(
+                &hint,
+                MediaSourceStream::new(media, Default::default()),
+                &FormatOptions {
+                    enable_gapless: true,
+                    ..Default::default()
+                },
+                &MetadataOptions::default(),
+            )
+            .ok()
     }
-    hint
 }
 
 /// Header-only read: tags, duration and stream format, no audio decoded.
 pub fn probe(path: &Path) -> Option<TrackInfo> {
-    let file = File::open(path).ok()?;
-    let stream = MediaSourceStream::new(Box::new(file), Default::default());
-    let mut probed = symphonia::default::get_probe()
-        .format(
-            &hint_for(path),
-            stream,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        )
-        .ok()?;
+    probe_source(&Source::File(path.to_path_buf()))
+}
 
+pub fn probe_source(source: &Source) -> Option<TrackInfo> {
+    let mut probed = source.open()?;
     let track = probed.format.default_track()?;
     let params = &track.codec_params;
 
@@ -93,34 +121,24 @@ pub fn probe(path: &Path) -> Option<TrackInfo> {
     Some(info)
 }
 
-/// Decodes the whole file into `sink`, converting to the sink's channel count
-/// and sample rate as it goes. Runs on its own thread; playback reads the
-/// buffer while it is still filling.
-pub fn decode_into(path: &Path, sink: Arc<PcmStream>) {
-    if let Err(()) = run(path, &sink) {
+/// Decodes everything into `sink`, converting to the sink's channel count and
+/// sample rate as it goes. Runs on its own thread; playback reads the buffer
+/// while it is still filling.
+pub fn decode_into(source: Source, sink: Arc<PcmStream>) {
+    if run(&source, &sink).is_none() {
         sink.mark_failed();
         return;
     }
     sink.mark_done();
 }
 
-fn run(path: &Path, sink: &PcmStream) -> Result<(), ()> {
-    let file = File::open(path).map_err(|_| ())?;
-    let stream = MediaSourceStream::new(Box::new(file), Default::default());
-    let mut probed = symphonia::default::get_probe()
-        .format(
-            &hint_for(path),
-            stream,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        )
-        .map_err(|_| ())?;
-
-    let track = probed.format.default_track().ok_or(())?;
+fn run(source: &Source, sink: &PcmStream) -> Option<()> {
+    let mut probed = source.open()?;
+    let track = probed.format.default_track()?;
     let track_id = track.id;
     let mut decoder = symphonia::default::get_codecs()
         .make(&track.codec_params, &DecoderOptions::default())
-        .map_err(|_| ())?;
+        .ok()?;
 
     let out_channels = sink.channels;
     let out_rate = sink.sample_rate;
@@ -128,13 +146,7 @@ fn run(path: &Path, sink: &PcmStream) -> Result<(), ()> {
     let mut sample_buf: Option<SampleBuffer<f32>> = None;
     let mut staging: Vec<f32> = Vec::new();
 
-    loop {
-        let packet = match probed.format.next_packet() {
-            Ok(p) => p,
-            Err(Error::IoError(_)) => break,
-            Err(Error::ResetRequired) => break,
-            Err(_) => break,
-        };
+    while let Ok(packet) = probed.format.next_packet() {
         if packet.track_id() != track_id {
             continue;
         }
@@ -146,29 +158,28 @@ fn run(path: &Path, sink: &PcmStream) -> Result<(), ()> {
         };
 
         let spec = *decoded.spec();
-        let frames = decoded.capacity() as u64;
-        let buf = sample_buf.get_or_insert_with(|| SampleBuffer::<f32>::new(frames, spec));
+        let buf = sample_buf
+            .get_or_insert_with(|| SampleBuffer::<f32>::new(decoded.capacity() as u64, spec));
         if buf.capacity() < decoded.frames() * spec.channels.count() {
             *buf = SampleBuffer::<f32>::new(decoded.frames() as u64, spec);
         }
         buf.copy_interleaved_ref(decoded);
 
-        let src_channels = spec.channels.count();
-        remix(buf.samples(), src_channels, out_channels, &mut staging);
+        remix(buf.samples(), spec.channels.count(), out_channels, &mut staging);
 
-        if spec.rate != out_rate {
-            let r = resampler.get_or_insert_with(|| {
-                Resampler::new(spec.rate, out_rate, out_channels)
-            });
+        let written = if spec.rate != out_rate {
+            let r =
+                resampler.get_or_insert_with(|| Resampler::new(spec.rate, out_rate, out_channels));
             let resampled = r.process(&staging);
-            if !sink.append(resampled) {
-                break;
-            }
-        } else if !sink.append(&staging) {
+            sink.append(resampled)
+        } else {
+            sink.append(&staging)
+        };
+        if !written {
             break;
         }
     }
-    Ok(())
+    Some(())
 }
 
 fn remix(input: &[f32], src: usize, dst: usize, out: &mut Vec<f32>) {
@@ -239,11 +250,13 @@ impl Resampler {
             let i = pos.floor() as usize;
             let t = (pos - i as f64) as f32;
             for c in 0..ch {
-                let p0 = frames[i * ch + c];
-                let p1 = frames[(i + 1) * ch + c];
-                let p2 = frames[(i + 2) * ch + c];
-                let p3 = frames[(i + 3) * ch + c];
-                self.out.push(catmull_rom(p0, p1, p2, p3, t));
+                self.out.push(catmull_rom(
+                    frames[i * ch + c],
+                    frames[(i + 1) * ch + c],
+                    frames[(i + 2) * ch + c],
+                    frames[(i + 3) * ch + c],
+                    t,
+                ));
             }
             pos += self.ratio;
         }
@@ -294,7 +307,7 @@ mod tests {
         std::fs::write(path, out).unwrap();
     }
 
-    fn scratch(name: &str) -> std::path::PathBuf {
+    fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join("tlk-tune-tests");
         std::fs::create_dir_all(&dir).unwrap();
         dir.join(name)
@@ -307,7 +320,11 @@ mod tests {
         let info = probe(&path).expect("probe failed");
         assert_eq!(info.sample_rate, 44100);
         assert_eq!(info.channels, 2);
-        assert!((info.duration - 1.5).abs() < 0.05, "duration {}", info.duration);
+        assert!(
+            (info.duration - 1.5).abs() < 0.05,
+            "duration {}",
+            info.duration
+        );
     }
 
     #[test]
@@ -315,16 +332,16 @@ mod tests {
         let path = scratch("decode.wav");
         write_sine_wav(&path, 44100, 1, 1.0);
         let sink = Arc::new(PcmStream::with_seconds(1.0, 48000, 2));
-        decode_into(&path, Arc::clone(&sink));
+        decode_into(Source::File(path), Arc::clone(&sink));
         assert!(sink.is_done() && !sink.has_failed());
         let frames = sink.available_frames();
         assert!(
             (frames as i64 - 48000).abs() < 600,
-            "resampled to {} frames",
-            frames
+            "resampled to {frames} frames"
         );
-        let peak = sink.snapshot().iter().fold(0.0f32, |a, b| a.max(b.abs()));
-        assert!(peak > 0.4, "peak {}", peak);
+        let mut peak = 0.0f32;
+        sink.for_each_mono(|v| peak = peak.max(v.abs()));
+        assert!(peak > 0.4, "peak {peak}");
     }
 
     #[test]
@@ -332,11 +349,18 @@ mod tests {
         let path = scratch("mono.wav");
         write_sine_wav(&path, 48000, 1, 0.3);
         let sink = Arc::new(PcmStream::with_seconds(0.3, 48000, 2));
-        decode_into(&path, Arc::clone(&sink));
-        let pcm = sink.snapshot();
-        assert!(pcm.len() > 1000);
-        for pair in pcm.chunks(2).take(500) {
+        decode_into(Source::File(path), Arc::clone(&sink));
+        let mut out = vec![0.0f32; 1000];
+        sink.read_into(0, &mut out, 1.0);
+        for pair in out.chunks(2) {
             assert_eq!(pair[0], pair[1]);
         }
+    }
+
+    #[test]
+    fn a_missing_file_fails_cleanly() {
+        let sink = Arc::new(PcmStream::with_seconds(1.0, 48000, 2));
+        decode_into(Source::File(scratch("nope.mp3")), Arc::clone(&sink));
+        assert!(sink.has_failed() && sink.is_done());
     }
 }

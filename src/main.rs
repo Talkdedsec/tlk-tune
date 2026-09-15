@@ -2,6 +2,8 @@ mod app;
 mod audio;
 mod config;
 mod lang;
+mod mediakeys;
+mod session;
 mod source;
 mod terminal;
 mod text;

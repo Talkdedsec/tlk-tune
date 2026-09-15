@@ -74,9 +74,39 @@ pub fn search(query: &str, count: usize) -> Vec<OnlineResult> {
         .collect()
 }
 
-/// Downloads the best audio-only stream into the cache and returns its path.
-/// Playing from a local file keeps the decoder and seek logic identical to
-/// local tracks.
+/// Resolves a direct, range-capable media URL plus its container extension.
+/// This is what lets an online track start on the first packet instead of
+/// after a full download.
+pub fn stream_url(id: &str) -> Option<(String, String)> {
+    let output = command("yt-dlp")
+        .args([
+            "-4",
+            "--no-warnings",
+            "--no-playlist",
+            "-f",
+            "bestaudio[ext=m4a]/bestaudio",
+            "-j",
+        ])
+        .arg(format!("https://www.youtube.com/watch?v={}", id))
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let v: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
+    let url = v.get("url")?.as_str()?.to_string();
+    let ext = v
+        .get("ext")
+        .and_then(|e| e.as_str())
+        .unwrap_or("m4a")
+        .to_string();
+    Some((url, ext))
+}
+
+/// Fallback for when a direct URL will not play: pull the whole file into the
+/// cache and treat it like any local track.
 pub fn resolve(id: &str) -> Option<PathBuf> {
     let dir = cache_dir();
     std::fs::create_dir_all(&dir).ok()?;

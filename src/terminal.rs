@@ -1,8 +1,11 @@
 use std::io::{self, Write};
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use crossterm::terminal;
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    KeyModifiers, MouseButton, MouseEventKind,
+};
+use crossterm::{execute, terminal};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Key {
@@ -18,6 +21,17 @@ pub enum Key {
     Char(char),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Input {
+    None,
+    Key(Key),
+    Click { col: usize, row: usize },
+    RightClick { col: usize, row: usize },
+    Drag { col: usize, row: usize },
+    Scroll { col: usize, row: usize, up: bool },
+    Resize,
+}
+
 pub struct Console {
     raw: bool,
 }
@@ -28,6 +42,7 @@ impl Console {
         use_utf8_codepage();
         terminal::enable_raw_mode()?;
         let mut out = io::stdout();
+        execute!(out, EnableMouseCapture)?;
         out.write_all(b"\x1b[?25l")?;
         out.flush()?;
         Ok(Console { raw: true })
@@ -37,14 +52,38 @@ impl Console {
         terminal::size().map(|(w, _)| w as i32).unwrap_or(155)
     }
 
-    /// Returns a pending key, or `Key::None`. Never blocks.
-    pub fn read_key(&self) -> Key {
+    /// Returns one pending event, or `Input::None`. Never blocks.
+    pub fn read(&self) -> Input {
         if !event::poll(Duration::from_millis(0)).unwrap_or(false) {
-            return Key::None;
+            return Input::None;
         }
         match event::read() {
-            Ok(Event::Key(k)) => translate(k),
-            _ => Key::None,
+            Ok(Event::Key(k)) => match translate(k) {
+                Key::None => Input::None,
+                key => Input::Key(key),
+            },
+            Ok(Event::Mouse(m)) => {
+                let col = m.column as usize + 1;
+                let row = m.row as usize + 1;
+                match m.kind {
+                    MouseEventKind::Down(MouseButton::Left) => Input::Click { col, row },
+                    MouseEventKind::Down(MouseButton::Right) => Input::RightClick { col, row },
+                    MouseEventKind::Drag(MouseButton::Left) => Input::Drag { col, row },
+                    MouseEventKind::ScrollUp => Input::Scroll {
+                        col,
+                        row,
+                        up: true,
+                    },
+                    MouseEventKind::ScrollDown => Input::Scroll {
+                        col,
+                        row,
+                        up: false,
+                    },
+                    _ => Input::None,
+                }
+            }
+            Ok(Event::Resize(_, _)) => Input::Resize,
+            _ => Input::None,
         }
     }
 
@@ -60,6 +99,7 @@ impl Console {
         }
         self.raw = false;
         let mut out = io::stdout();
+        let _ = execute!(out, DisableMouseCapture);
         let _ = out.write_all(b"\x1b[0m\x1b[2J\x1b[H\x1b[?25h");
         let _ = out.flush();
         let _ = terminal::disable_raw_mode();
