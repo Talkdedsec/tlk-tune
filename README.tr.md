@@ -1,5 +1,9 @@
 # tlk-tune
 
+[![ci](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml/badge.svg)](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/Talkdedsec/tlk-tune)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
+[![license](https://img.shields.io/github/license/Talkdedsec/tlk-tune)](LICENSE)
+
 Windows için terminal müzik çalar. Tek exe, harici bağımlılık yok, klavye ve
 fare ile.
 

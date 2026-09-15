@@ -2,7 +2,7 @@
 name = "tlk-tune"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.88"
 description = "Terminal music player for Windows: native decoding, album art, equaliser, synced lyrics, mouse and keyboard."
 authors = ["Talkdedsec <292909750+Talkdedsec@users.noreply.github.com>"]
 license = "MIT"
