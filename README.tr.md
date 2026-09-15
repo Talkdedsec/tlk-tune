@@ -83,6 +83,7 @@ cargo build --release
 | Görünümü değiştir | `v` |
 | Sanatçıya göre filtrele | `g` |
 | Sırayı yeniden dizle | `Shift+↑` / `Shift+↓` |
+| Sözleri kaydır | `[` / `]` |
 | Uyku zamanlayıcısı | `t` |
 | Tüm tuşlar, ekranda | `?` |
 | Akışı indir | `y` |

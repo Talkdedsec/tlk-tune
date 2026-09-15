@@ -67,12 +67,6 @@ pub fn metadata(app: &mut App, total_width: usize) -> Vec<String> {
         }
     }
 
-    let elapsed = if app.has_track {
-        app.player.elapsed()
-    } else {
-        0.0
-    };
-
     let mut rows: Vec<String> = vec![String::new(); panel_h];
     let mut bars: Vec<i32> = Vec::new();
 
@@ -157,13 +151,16 @@ pub fn metadata(app: &mut App, total_width: usize) -> Vec<String> {
 
     let mut lyric_rows: Vec<String> = vec![" ".repeat(lyrics_w); panel_h];
     if cfg.show_lyrics && lyrics_w > 0 {
+        // Lyrics run on their own clock so a track's shift can correct
+        // timings published for a different master.
+        let lyric_time = app.lyric_clock();
         build_lyrics(
             app,
             &cfg,
             &bars,
             lyrics_w,
             panel_h,
-            elapsed,
+            lyric_time,
             &mut lyric_rows,
         );
     }

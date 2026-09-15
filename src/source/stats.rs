@@ -15,6 +15,10 @@ pub struct Stats {
     /// first time it is played.
     #[serde(default)]
     pub loudness: HashMap<String, f64>,
+    /// Seconds to shift synced lyrics by, per track. Timings published for a
+    /// release rarely line up with a rip of the same song.
+    #[serde(default)]
+    pub lyric_offset: HashMap<String, f64>,
     #[serde(default)]
     dirty: bool,
 }
@@ -113,6 +117,17 @@ impl Stats {
         self.dirty = true;
     }
 
+    pub fn lyric_offset(&self, track: &Path) -> f64 {
+        self.lyric_offset.get(&key(track)).copied().unwrap_or(0.0)
+    }
+
+    pub fn nudge_lyrics(&mut self, track: &Path, delta: f64) -> f64 {
+        let slot = self.lyric_offset.entry(key(track)).or_insert(0.0);
+        *slot = (*slot + delta).clamp(-30.0, 30.0);
+        self.dirty = true;
+        *slot
+    }
+
     pub fn liked_count(&self) -> usize {
         self.liked.len()
     }
@@ -200,6 +215,19 @@ mod tests {
         stats.record_play(track);
         assert_eq!(stats.plays(track), 2);
         assert!(stats.last_played(track) > 0);
+    }
+
+    #[test]
+    fn lyric_offsets_accumulate_and_stay_bounded() {
+        let mut stats = Stats::default();
+        let track = Path::new("E:/Muzik/Song.mp3");
+        assert_eq!(stats.lyric_offset(track), 0.0);
+        assert_eq!(stats.nudge_lyrics(track, 0.25), 0.25);
+        assert_eq!(stats.nudge_lyrics(track, -0.5), -0.25);
+        for _ in 0..500 {
+            stats.nudge_lyrics(track, 1.0);
+        }
+        assert_eq!(stats.lyric_offset(track), 30.0);
     }
 
     #[test]

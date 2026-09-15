@@ -53,6 +53,7 @@ fn rows(app: &App) -> Vec<(String, &'static str)> {
         ("g".to_string(), s.help_artist),
         (key("HKeyClearFilter"), s.help_clear),
         ("t".to_string(), s.help_sleep),
+        ("[  ]".to_string(), s.help_lyrics),
         (key("HKeyDownloadStream"), s.help_download),
         (key("HKeySetting"), s.help_settings),
         ("?".to_string(), s.help_help),
