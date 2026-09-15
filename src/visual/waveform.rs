@@ -41,29 +41,59 @@ pub fn column(level: i32) -> Column {
     }
 }
 
-/// Builds a width-independent RMS envelope so the bar can be re-fitted to any
-/// terminal width later without re-reading the PCM.
-pub fn envelope(pcm: &[f32], resolution: usize, smooth: bool) -> Vec<f32> {
-    let mut out = vec![0.0f32; resolution];
-    if pcm.is_empty() || resolution == 0 {
-        return out;
+/// Accumulates the envelope one sample at a time.
+///
+/// The whole track never exists as a second copy this way: an hour of audio
+/// would otherwise mean a 690 MB `Vec<f32>` just to draw a bar a few hundred
+/// columns wide.
+pub struct Builder {
+    sums: Vec<f32>,
+    counts: Vec<u32>,
+    chunk: usize,
+    slot: usize,
+    in_slot: usize,
+}
+
+impl Builder {
+    pub fn new(total_frames: usize, resolution: usize) -> Builder {
+        let resolution = resolution.max(1);
+        Builder {
+            sums: vec![0.0; resolution],
+            counts: vec![0; resolution],
+            chunk: (total_frames / resolution).max(1),
+            slot: 0,
+            in_slot: 0,
+        }
     }
 
-    let chunk = (pcm.len() / resolution).max(1);
-    let mut rms = vec![0.0f32; resolution];
-    for (i, slot) in rms.iter_mut().enumerate() {
-        let start = i * chunk;
-        if start >= pcm.len() {
-            break;
+    #[inline]
+    pub fn push(&mut self, sample: f32) {
+        if self.slot >= self.sums.len() {
+            return;
         }
-        let end = (start + chunk).min(pcm.len());
-        let mut sum = 0.0f32;
-        for s in &pcm[start..end] {
-            sum += s * s;
+        self.sums[self.slot] += sample * sample;
+        self.counts[self.slot] += 1;
+        self.in_slot += 1;
+        if self.in_slot == self.chunk {
+            self.slot += 1;
+            self.in_slot = 0;
         }
-        *slot = (sum / (end - start) as f32).sqrt();
     }
 
+    pub fn finish(self, smooth: bool) -> Vec<f32> {
+        let resolution = self.sums.len();
+        let mut rms = vec![0.0f32; resolution];
+        for (i, slot) in rms.iter_mut().enumerate() {
+            if self.counts[i] > 0 {
+                *slot = (self.sums[i] / self.counts[i] as f32).sqrt();
+            }
+        }
+        shape(rms, smooth)
+    }
+}
+
+fn shape(rms: Vec<f32>, smooth: bool) -> Vec<f32> {
+    let resolution = rms.len();
     let source = if smooth {
         const W: [f32; 3] = [0.15, 0.70, 0.15];
         let mut blurred = vec![0.0f32; resolution];
@@ -85,10 +115,10 @@ pub fn envelope(pcm: &[f32], resolution: usize, smooth: bool) -> Vec<f32> {
     };
 
     let peak = source.iter().copied().fold(0.0001f32, f32::max);
-    for (i, v) in source.iter().enumerate() {
-        out[i] = (v / peak).powf(2.5).clamp(0.0, 1.0);
-    }
-    out
+    source
+        .iter()
+        .map(|v| (v / peak).powf(2.5).clamp(0.0, 1.0))
+        .collect()
 }
 
 /// Peak decimation down to one 0..=5 level per terminal column, so a short
@@ -123,15 +153,33 @@ pub fn fit(model: &[f32], width: usize) -> Vec<i32> {
 mod tests {
     use super::*;
 
+    fn build(pcm: &[f32], resolution: usize, smooth: bool) -> Vec<f32> {
+        let mut builder = Builder::new(pcm.len(), resolution);
+        for sample in pcm {
+            builder.push(*sample);
+        }
+        builder.finish(smooth)
+    }
+
     #[test]
     fn envelope_is_normalised() {
         let pcm: Vec<f32> = (0..8000)
             .map(|i| (i as f32 * 0.05).sin() * (i as f32 / 8000.0))
             .collect();
-        let model = envelope(&pcm, 256, false);
+        let model = build(&pcm, 256, false);
         assert_eq!(model.len(), 256);
         assert!(model.iter().all(|v| (0.0..=1.0).contains(v)));
         assert!(model.iter().cloned().fold(0.0, f32::max) > 0.99);
+    }
+
+    #[test]
+    fn the_envelope_follows_the_signal() {
+        // Quiet first half, loud second half.
+        let mut pcm = vec![0.05f32; 20_000];
+        pcm.extend(std::iter::repeat_n(0.9f32, 20_000));
+        let model = build(&pcm, 100, false);
+        assert!(model[10] < 0.05, "quiet half read {}", model[10]);
+        assert!(model[90] > 0.9, "loud half read {}", model[90]);
     }
 
     #[test]
@@ -148,5 +196,30 @@ mod tests {
     fn gate_drops_near_silence() {
         let levels = fit(&[0.05f32; 20], 4);
         assert!(levels.iter().all(|l| *l == 0));
+    }
+
+    #[test]
+    fn smoothing_takes_the_edge_off_a_single_spike() {
+        let mut pcm = vec![0.2f32; 10_000];
+        for sample in pcm.iter_mut().skip(5_000).take(100) {
+            *sample = 1.0;
+        }
+        let raw = build(&pcm, 100, false);
+        let smooth = build(&pcm, 100, true);
+        let sharpest = raw.iter().cloned().fold(0.0f32, f32::max);
+        let softened = smooth.iter().cloned().fold(0.0f32, f32::max);
+        assert!(softened <= sharpest);
+        assert_eq!(raw.len(), smooth.len());
+    }
+
+    #[test]
+    fn extra_samples_do_not_run_off_the_end() {
+        let mut builder = Builder::new(100, 10);
+        for _ in 0..500 {
+            builder.push(0.5);
+        }
+        let model = builder.finish(false);
+        assert_eq!(model.len(), 10);
+        assert!(model.iter().all(|v| v.is_finite()));
     }
 }

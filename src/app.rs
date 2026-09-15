@@ -672,10 +672,10 @@ impl App {
             if wave_sink.has_failed() {
                 return;
             }
-            let mut mono = Vec::with_capacity(wave_sink.available_frames());
-            wave_sink.for_each_mono(|v| mono.push(v));
-            let model = waveform::envelope(&mono, waveform::RESOLUTION, smooth);
-            let _ = wave_tx.send(Message::Waveform(model));
+            let mut builder =
+                waveform::Builder::new(wave_sink.available_frames(), waveform::RESOLUTION);
+            wave_sink.for_each_mono(|v| builder.push(v));
+            let _ = wave_tx.send(Message::Waveform(builder.finish(smooth)));
 
             if measure {
                 if let (Some(path), Some(lufs)) = (measured_path, loudness::integrated(&wave_sink))
@@ -989,6 +989,10 @@ impl App {
             self.filter_to_artist();
         } else if key == Key::Char('t') {
             self.cycle_sleep_timer();
+        } else if key == Key::Char('[') {
+            self.nudge_lyrics(-0.25);
+        } else if key == Key::Char(']') {
+            self.nudge_lyrics(0.25);
         } else if key == Key::Char('?') {
             self.mode = Mode::Help;
             self.force_redraw = true;
@@ -1061,6 +1065,25 @@ impl App {
             ViewMode::Played => self.lang.view_played,
             ViewMode::Recent => self.lang.view_recent,
         }
+    }
+
+    /// Shifts the synced lyrics for whatever is playing, and remembers it.
+    fn nudge_lyrics(&mut self, delta: f64) {
+        let Some(path) = self.current_path.clone() else {
+            return;
+        };
+        let offset = self.stats.nudge_lyrics(&path, delta);
+        self.status = format!("{} {:+.2} s", self.lang.lyric_shift, offset);
+    }
+
+    /// Where the lyrics think we are, once the track's own shift is applied.
+    pub fn lyric_clock(&self) -> f64 {
+        let offset = self
+            .current_path
+            .as_ref()
+            .map(|p| self.stats.lyric_offset(p))
+            .unwrap_or(0.0);
+        self.player.elapsed() - offset
     }
 
     /// Off, then a quarter hour at a time up to an hour and a half.

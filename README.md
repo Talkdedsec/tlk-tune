@@ -83,6 +83,7 @@ streaming and downloads.
 | Change view | `v` |
 | Filter by artist | `g` |
 | Reorder the queue | `Shift+↑` / `Shift+↓` |
+| Shift the lyrics | `[` / `]` |
 | Sleep timer | `t` |
 | Every key, on screen | `?` |
 | Download stream | `y` |
