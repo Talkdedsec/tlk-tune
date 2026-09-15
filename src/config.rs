@@ -146,7 +146,9 @@ pub fn map_font(text: &str, map: &FontMap) -> String {
             continue;
         }
         match map.get(&c.to_ascii_uppercase()) {
-            Some((upper, lower)) => out.push_str(if c.is_ascii_uppercase() { upper } else { lower }),
+            Some((upper, lower)) => {
+                out.push_str(if c.is_ascii_uppercase() { upper } else { lower })
+            }
             None => out.push(c),
         }
     }
@@ -236,6 +238,8 @@ pub struct Config {
     pub button: String,
 
     pub crossfade_ms: u32,
+    pub normalize: bool,
+    pub normalize_target: f64,
     pub eq: [f32; 10],
     pub list_liked_fg: String,
 
@@ -317,6 +321,8 @@ impl Default for Config {
             button: String::new(),
 
             crossfade_ms: 0,
+            normalize: true,
+            normalize_target: -18.0,
             eq: [0.0; 10],
             list_liked_fg: "214".into(),
 
@@ -530,6 +536,14 @@ pub fn load() -> Config {
             "ColorListLikedFg" => c.list_liked_fg = as_colour(value),
 
             "CrossfadeMs" => c.crossfade_ms = value.trim().parse().unwrap_or(0).min(12_000),
+            "Normalize" => c.normalize = as_bool(value),
+            "NormalizeTarget" => {
+                c.normalize_target = value
+                    .trim()
+                    .parse::<f64>()
+                    .unwrap_or(-18.0)
+                    .clamp(-30.0, -6.0)
+            }
             "Equalizer" => {
                 for (i, part) in unquote(value).split(',').take(10).enumerate() {
                     c.eq[i] = part.trim().parse::<f32>().unwrap_or(0.0).clamp(-12.0, 12.0);
@@ -545,11 +559,15 @@ pub fn load() -> Config {
             "LyricsPlaceholderBall" => c.show_lyric_ball = as_bool(value),
             "Visualizer" => c.show_visualizer = as_bool(value),
 
-            "VisualizerFluidity" => c.viz_fluidity = value.trim().parse().unwrap_or(10).clamp(1, 10),
+            "VisualizerFluidity" => {
+                c.viz_fluidity = value.trim().parse().unwrap_or(10).clamp(1, 10)
+            }
             "VisualizerDegradationSpeed" => {
                 c.viz_decay = value.trim().parse().unwrap_or(10).clamp(1, 10)
             }
-            "VisualizerViscosity" => c.viz_viscosity = value.trim().parse().unwrap_or(1).clamp(0, 10),
+            "VisualizerViscosity" => {
+                c.viz_viscosity = value.trim().parse().unwrap_or(1).clamp(0, 10)
+            }
             "WaveformStyle" => c.waveform_smooth = unquote(value) == "smooth",
             "DiskRotationSpeed" => {
                 c.disk_speed = value.trim().parse::<f64>().unwrap_or(0.25).clamp(0.01, 1.0)
@@ -720,7 +738,10 @@ pub fn save(c: &Config) -> std::io::Result<()> {
     o.push_str("\n##-------------------------------------------\n");
     o.push_str("##             PANEL 3: ANIMATION\n");
     o.push_str("##-------------------------------------------\n\n");
-    o.push_str(&format!("VisualizerFluidity={}\n## 1 to 10\n", c.viz_fluidity));
+    o.push_str(&format!(
+        "VisualizerFluidity={}\n## 1 to 10\n",
+        c.viz_fluidity
+    ));
     o.push_str(&format!(
         "WaveformStyle={}\n## raw , smooth\n",
         if c.waveform_smooth { "smooth" } else { "raw" }
@@ -737,7 +758,10 @@ pub fn save(c: &Config) -> std::io::Result<()> {
         "VisualizerDegradationSpeed={}\n## 1 to 10\n",
         c.viz_decay
     ));
-    o.push_str(&format!("VisualizerViscosity={}\n## 1 to 10\n", c.viz_viscosity));
+    o.push_str(&format!(
+        "VisualizerViscosity={}\n## 1 to 10\n",
+        c.viz_viscosity
+    ));
     o.push_str(&format!(
         "LyricsAlignment={}\n## center , left , right\n",
         LYRIC_ALIGNMENTS[c.lyric_alignment.clamp(0, 2) as usize]

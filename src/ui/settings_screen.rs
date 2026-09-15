@@ -10,8 +10,8 @@ const INVERT: &str = "\x1b[7m";
 const EDITING: &str = "\x1b[41;37m";
 const COLOUR_ROWS: usize = 14;
 const HOTKEY_ROWS: usize = 11;
-const ANIM_ROWS: usize = 11;
-const ONOFF_ROWS: usize = 8;
+const ANIM_ROWS: usize = 12;
+const ONOFF_ROWS: usize = 9;
 const PATH_FIELD: usize = 60;
 const EQ_ROWS: usize = eq::BANDS.len() + 1;
 const SLIDER_X: usize = 34;
@@ -90,7 +90,8 @@ fn toggle_value(cfg: &Config, row: usize) -> bool {
         4 => cfg.show_waveform,
         5 => cfg.show_lyrics,
         6 => cfg.show_lyric_ball,
-        _ => cfg.show_visualizer,
+        7 => cfg.show_visualizer,
+        _ => cfg.normalize,
     }
 }
 
@@ -103,7 +104,8 @@ fn set_toggle(cfg: &mut Config, row: usize, value: bool) {
         4 => cfg.show_waveform = value,
         5 => cfg.show_lyrics = value,
         6 => cfg.show_lyric_ball = value,
-        _ => cfg.show_visualizer = value,
+        7 => cfg.show_visualizer = value,
+        _ => cfg.normalize = value,
     }
 }
 
@@ -124,13 +126,14 @@ fn animation_value(app: &App, row: usize) -> String {
             None if app.player.output().name.is_empty() => app.lang.device_default.to_string(),
             None => app.player.output().name.clone(),
         },
-        _ => {
+        10 => {
             if cfg.crossfade_ms == 0 {
                 "gapless".to_string()
             } else {
                 format!("{:.1} s", cfg.crossfade_ms as f32 / 1000.0)
             }
         }
+        _ => format!("{:.0} LUFS", cfg.normalize_target),
     }
 }
 
@@ -275,10 +278,14 @@ fn cycle(app: &mut App, direction: i32) {
                 app.apply_language(Language::from_config(LANGUAGES[next]));
             }
             9 => cycle_device(app, direction),
-            _ => {
+            10 => {
                 let next = app.cfg.crossfade_ms as i32 + direction * 250;
                 app.cfg.crossfade_ms = next.clamp(0, 12_000) as u32;
                 app.player.set_crossfade_ms(app.cfg.crossfade_ms);
+            }
+            _ => {
+                app.cfg.normalize_target =
+                    (app.cfg.normalize_target + direction as f64).clamp(-30.0, -6.0);
             }
         },
         TAB_EQ => {
@@ -547,7 +554,11 @@ pub fn handle_pointer(app: &mut App, input: Input) {
     }
 
     if row <= 2 {
-        if let Some((index, _, _)) = strip.top.iter().find(|(_, x0, x1)| col >= *x0 && col <= *x1) {
+        if let Some((index, _, _)) = strip
+            .top
+            .iter()
+            .find(|(_, x0, x1)| col >= *x0 && col <= *x1)
+        {
             app.settings_tab = *index as i32;
             app.settings_row = 0;
             app.settings_col = 0;
@@ -593,10 +604,9 @@ pub fn handle_pointer(app: &mut App, input: Input) {
                 begin_edit(app);
             }
         }
-        TAB_REFERENCE
-            if already => {
-                begin_edit(app);
-            }
+        TAB_REFERENCE if already => {
+            begin_edit(app);
+        }
         _ => {}
     }
 }
@@ -669,13 +679,28 @@ pub fn build(app: &App, width: usize, player_height: i32) -> String {
     line1.push('\u{2510}');
     line2.push('\u{2502}');
 
-    at(&mut frame, 1, 1, &format!("{}{}{}", border(1), line1, RESET));
-    at(&mut frame, 2, 1, &format!("{}{}{}", border(2), line2, RESET));
+    at(
+        &mut frame,
+        1,
+        1,
+        &format!("{}{}{}", border(1), line1, RESET),
+    );
+    at(
+        &mut frame,
+        2,
+        1,
+        &format!("{}{}{}", border(2), line2, RESET),
+    );
 
     let mut y = 3i32;
     macro_rules! edge {
         ($y:expr) => {
-            at(&mut frame, $y, 1, &format!("{}\u{2502}{}", border($y), RESET));
+            at(
+                &mut frame,
+                $y,
+                1,
+                &format!("{}\u{2502}{}", border($y), RESET),
+            );
             at(
                 &mut frame,
                 $y,

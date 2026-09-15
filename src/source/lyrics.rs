@@ -83,7 +83,11 @@ pub fn parse_lrc(text: &str) -> Vec<LyricLine> {
         }
     }
 
-    lines.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap_or(std::cmp::Ordering::Equal));
+    lines.sort_by(|a, b| {
+        a.start
+            .partial_cmp(&b.start)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     lines
 }
 
@@ -97,9 +101,7 @@ fn split_word_tags(input: &str) -> (String, Vec<(f64, String)>) {
     let mut buffer = String::new();
     let mut rest = input;
 
-    let flush = |buffer: &mut String,
-                 pending: &mut Option<f64>,
-                 words: &mut Vec<(f64, String)>| {
+    let flush = |buffer: &mut String, pending: &mut Option<f64>, words: &mut Vec<(f64, String)>| {
         let chunk = buffer.trim();
         if !chunk.is_empty() {
             let t = pending.unwrap_or(-1.0);
@@ -129,7 +131,10 @@ fn split_word_tags(input: &str) -> (String, Vec<(f64, String)>) {
     plain.push_str(rest);
     flush(&mut buffer, &mut pending, &mut words);
 
-    (plain.split_whitespace().collect::<Vec<_>>().join(" "), words)
+    (
+        plain.split_whitespace().collect::<Vec<_>>().join(" "),
+        words,
+    )
 }
 
 /// LRCLIB only ships line-level timing. Spreading each line's duration over
@@ -177,7 +182,14 @@ fn read_sidecar(track: &Path) -> Option<String> {
 
 fn clean_query(value: &str) -> String {
     let mut s = value.trim().to_string();
-    for marker in [" - Official", " (Official", " [Official", " | ", " ft. ", " feat. "] {
+    for marker in [
+        " - Official",
+        " (Official",
+        " [Official",
+        " | ",
+        " ft. ",
+        " feat. ",
+    ] {
         if let Some(pos) = s.find(marker) {
             s.truncate(pos);
         }

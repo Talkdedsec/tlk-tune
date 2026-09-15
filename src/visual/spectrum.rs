@@ -58,8 +58,7 @@ impl Spectrum {
         let scratch_out = fft.make_output_vec();
         let window = (0..FFT_SIZE)
             .map(|i| {
-                0.5 * (1.0
-                    - (2.0 * std::f32::consts::PI * i as f32 / (FFT_SIZE - 1) as f32).cos())
+                0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / (FFT_SIZE - 1) as f32).cos())
             })
             .collect();
         Spectrum {
@@ -215,14 +214,18 @@ impl Spectrum {
         if self.viscosity > 0.0 && count > 2 {
             let mut blended = self.levels.clone();
             for (i, slot) in blended.iter_mut().enumerate() {
-                let left = if i > 0 { self.levels[i - 1] } else { self.levels[i] };
+                let left = if i > 0 {
+                    self.levels[i - 1]
+                } else {
+                    self.levels[i]
+                };
                 let right = if i + 1 < count {
                     self.levels[i + 1]
                 } else {
                     self.levels[i]
                 };
-                *slot = self.levels[i] * (1.0 - self.viscosity)
-                    + (left + right) * 0.5 * self.viscosity;
+                *slot =
+                    self.levels[i] * (1.0 - self.viscosity) + (left + right) * 0.5 * self.viscosity;
             }
             self.levels = blended;
         }

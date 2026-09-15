@@ -7,6 +7,7 @@ use cpal::{Device, SampleFormat, StreamConfig};
 
 use super::buffer::PcmStream;
 use super::eq;
+use super::loudness;
 use crate::visual::spectrum::SpectrumSink;
 
 pub struct Output {
@@ -38,6 +39,7 @@ struct Mix {
     fade_left: AtomicUsize,
     curve: ArcSwap<eq::Curve>,
     gain: AtomicU32,
+    track_gain: AtomicU32,
     paused: AtomicBool,
     finished: AtomicBool,
     lost: AtomicBool,
@@ -47,6 +49,7 @@ struct Mix {
 impl Mix {
     fn gain(&self) -> f32 {
         f32::from_bits(self.gain.load(Ordering::Relaxed))
+            * f32::from_bits(self.track_gain.load(Ordering::Relaxed))
     }
 }
 
@@ -74,6 +77,7 @@ impl Player {
             fade_left: AtomicUsize::new(0),
             curve: ArcSwap::from_pointee(eq::build(&[0.0; 10], output.sample_rate)),
             gain: AtomicU32::new(0.7f32.to_bits()),
+            track_gain: AtomicU32::new(1.0f32.to_bits()),
             paused: AtomicBool::new(false),
             finished: AtomicBool::new(false),
             lost: AtomicBool::new(false),
@@ -156,7 +160,12 @@ impl Player {
         self.open_stream();
     }
 
-    pub fn play(&mut self, pcm: Arc<PcmStream>, start_sec: f64, sink: Option<SpectrumSink>) -> bool {
+    pub fn play(
+        &mut self,
+        pcm: Arc<PcmStream>,
+        start_sec: f64,
+        sink: Option<SpectrumSink>,
+    ) -> bool {
         let rate = pcm.sample_rate;
         let deck = Arc::new(Deck::new(pcm, (start_sec * rate as f64) as i64));
 
@@ -237,7 +246,8 @@ impl Player {
         };
         let limit = deck.pcm.available_frames().saturating_sub(1);
         let frame = (seconds.max(0.0) * deck.pcm.sample_rate as f64) as usize;
-        deck.cursor.store(frame.min(limit) as i64, Ordering::Relaxed);
+        deck.cursor
+            .store(frame.min(limit) as i64, Ordering::Relaxed);
         self.mix.finished.store(false, Ordering::Relaxed);
     }
 
@@ -266,6 +276,15 @@ impl Player {
         self.mix.gain.store(gain.to_bits(), Ordering::Relaxed);
     }
 
+    /// Per-track replay gain, in dB. Reset to zero whenever a track starts
+    /// so a measured one never leaks its correction onto the next.
+    pub fn set_track_gain_db(&self, db: f32) {
+        let linear = 10f32.powf(db.clamp(-15.0, 15.0) / 20.0);
+        self.mix
+            .track_gain
+            .store(linear.to_bits(), Ordering::Relaxed);
+    }
+
     pub fn set_crossfade_ms(&mut self, ms: u32) {
         self.crossfade_ms = ms.min(12_000);
     }
@@ -276,7 +295,6 @@ impl Player {
             .curve
             .store(Arc::new(eq::build(&self.gains, self.output.sample_rate)));
     }
-
 }
 
 impl Drop for Player {
@@ -287,13 +305,7 @@ impl Drop for Player {
 
 /// The whole audio path: two decks, a crossfade between them, the equaliser,
 /// then the master gain. Allocation-free by construction.
-fn render(
-    mix: &Mix,
-    out: &mut [f32],
-    channels: usize,
-    rate: u32,
-    states: &mut [[eq::State; 10]],
-) {
+fn render(mix: &Mix, out: &mut [f32], channels: usize, rate: u32, states: &mut [[eq::State; 10]]) {
     out.fill(0.0);
     if mix.paused.load(Ordering::Relaxed) {
         return;
@@ -367,7 +379,7 @@ fn render(
     }
 
     for sample in out.iter_mut() {
-        *sample = (*sample * master).clamp(-1.0, 1.0);
+        *sample = loudness::soft_clip(*sample * master);
     }
 
     if let Some(sink) = mix.sink.load_full() {
@@ -461,6 +473,7 @@ mod tests {
             fade_left: AtomicUsize::new(0),
             curve: ArcSwap::from_pointee(eq::build(&[0.0; 10], rate)),
             gain: AtomicU32::new(1.0f32.to_bits()),
+            track_gain: AtomicU32::new(1.0f32.to_bits()),
             paused: AtomicBool::new(false),
             finished: AtomicBool::new(false),
             lost: AtomicBool::new(false),
@@ -504,6 +517,7 @@ mod tests {
             fade_left: AtomicUsize::new(0),
             curve: ArcSwap::from_pointee(eq::build(&[0.0; 10], rate)),
             gain: AtomicU32::new(1.0f32.to_bits()),
+            track_gain: AtomicU32::new(1.0f32.to_bits()),
             paused: AtomicBool::new(true),
             finished: AtomicBool::new(false),
             lost: AtomicBool::new(false),

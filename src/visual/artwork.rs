@@ -1,5 +1,32 @@
 use image::imageops::FilterType;
 
+use crate::audio::decoder::Source;
+
+const SIDECAR_NAMES: [&str; 6] = [
+    "cover.jpg",
+    "cover.png",
+    "folder.jpg",
+    "folder.png",
+    "front.jpg",
+    "album.jpg",
+];
+
+/// A cover sitting next to the track, the way ripped albums usually store it
+/// when the tag itself has no picture.
+pub fn beside_the_track(source: &Source) -> Option<Vec<u8>> {
+    let Source::File(path) = source else {
+        return None;
+    };
+    let folder = path.parent()?;
+    for name in SIDECAR_NAMES {
+        let candidate = folder.join(name);
+        if let Ok(bytes) = std::fs::read(&candidate) {
+            return Some(bytes);
+        }
+    }
+    None
+}
+
 /// Renders cover art into terminal cells using the upper half block, so each
 /// cell carries two pixels: the foreground paints the top, the background the
 /// bottom. That doubles the vertical resolution and keeps the aspect square,

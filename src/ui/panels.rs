@@ -56,7 +56,12 @@ pub fn metadata(app: &mut App, total_width: usize) -> Vec<String> {
                     } else {
                         0.0
                     };
-                    *row = format!("{}{}{}", config::ramp(&cfg.disk, &cfg.disk_end, t), row, RESET);
+                    *row = format!(
+                        "{}{}{}",
+                        config::ramp(&cfg.disk, &cfg.disk_end, t),
+                        row,
+                        RESET
+                    );
                 }
             }
         }
@@ -152,7 +157,15 @@ pub fn metadata(app: &mut App, total_width: usize) -> Vec<String> {
 
     let mut lyric_rows: Vec<String> = vec![" ".repeat(lyrics_w); panel_h];
     if cfg.show_lyrics && lyrics_w > 0 {
-        build_lyrics(app, &cfg, &bars, lyrics_w, panel_h, elapsed, &mut lyric_rows);
+        build_lyrics(
+            app,
+            &cfg,
+            &bars,
+            lyrics_w,
+            panel_h,
+            elapsed,
+            &mut lyric_rows,
+        );
     }
 
     let border = config::fg(&cfg.border);
@@ -388,11 +401,7 @@ fn wrap_line(
         config::fg(&cfg.lyric_line_fg),
         config::bg(&cfg.lyric_line_bg)
     );
-    let idle_ansi = format!(
-        "{}{}",
-        config::fg(&cfg.lyric_fg),
-        config::bg(&cfg.lyric_bg)
-    );
+    let idle_ansi = format!("{}{}", config::fg(&cfg.lyric_fg), config::bg(&cfg.lyric_bg));
     let progressive = is_active && (cfg.lyric_animation == 1 || cfg.lyric_animation == 2);
 
     let mut out = Vec::with_capacity(rows.len());
@@ -573,7 +582,12 @@ pub fn progress(app: &mut App, total_width: usize) -> Vec<String> {
     let bar = chrome.bar(&border);
 
     let button = |label: &str| -> String {
-        let body = format!("{}{}{}", button_colour, text::center(label, button_inner), RESET);
+        let body = format!(
+            "{}{}{}",
+            button_colour,
+            text::center(label, button_inner),
+            RESET
+        );
         format!("{} {} {}", chrome.bar(&border), body, chrome.bar(&border))
     };
 
@@ -754,12 +768,13 @@ pub fn list(app: &App, total_width: usize, height: usize) -> Vec<String> {
             if online {
                 let r = &app.online[idx];
                 let uploader_w = 18usize;
-                let title_w = inner
-                    .saturating_sub(INDEX_W + 2 + 2 + uploader_w)
-                    .max(5);
+                let title_w = inner.saturating_sub(INDEX_W + 2 + 2 + uploader_w).max(5);
                 content = format!(
                     "{}{} {}{} {}",
-                    text::pad_right(&config::map_font(&(idx + 1).to_string(), &cfg.font), INDEX_W),
+                    text::pad_right(
+                        &config::map_font(&(idx + 1).to_string(), &cfg.font),
+                        INDEX_W
+                    ),
                     cfg.list_separator,
                     text::pad_right(
                         &text::truncate(&config::map_font(&r.title, &cfg.font), title_w),
@@ -778,14 +793,24 @@ pub fn list(app: &App, total_width: usize, height: usize) -> Vec<String> {
                 let title_w = inner
                     .saturating_sub(INDEX_W + 2 + 2 + artist_w + 2 + duration_w)
                     .max(5);
-                let duration = app.row_meta.get(&t.path).map(|m| m.duration).unwrap_or(-1.0);
+                let duration = app
+                    .row_meta
+                    .get(&t.path)
+                    .map(|m| m.duration)
+                    .unwrap_or(-1.0);
                 let artist = app.display_artist(t);
                 content = format!(
                     "{}{} {}{} {}{} {}",
-                    text::pad_right(&config::map_font(&(idx + 1).to_string(), &cfg.font), INDEX_W),
+                    text::pad_right(
+                        &config::map_font(&(idx + 1).to_string(), &cfg.font),
+                        INDEX_W
+                    ),
                     cfg.list_separator,
                     text::pad_right(
-                        &text::truncate(&config::map_font(&app.display_title(t), &cfg.font), title_w),
+                        &text::truncate(
+                            &config::map_font(&app.display_title(t), &cfg.font),
+                            title_w
+                        ),
                         title_w
                     ),
                     cfg.list_separator,
@@ -805,9 +830,7 @@ pub fn list(app: &App, total_width: usize, height: usize) -> Vec<String> {
             && idx < total
             && Some(&app.view[idx].path) == app.current_path.as_ref();
 
-        let liked = !online
-            && idx < total
-            && app.stats.is_liked(&app.view[idx].path);
+        let liked = !online && idx < total && app.stats.is_liked(&app.view[idx].path);
 
         let body = text::pad_right(&text::truncate(&content, inner), inner);
         let paint = if selected {

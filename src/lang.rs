@@ -123,8 +123,8 @@ pub struct Strings {
     pub preview_lyric_b: &'static str,
     pub preview_lyric_c: &'static str,
 
-    pub onoff_rows: [&'static str; 8],
-    pub anim_rows: [&'static str; 11],
+    pub onoff_rows: [&'static str; 9],
+    pub anim_rows: [&'static str; 12],
     pub ref_rows: [&'static str; 11],
 }
 
@@ -233,6 +233,7 @@ pub static EN: Strings = Strings {
         "Lyrics Engine",
         "Lyric Ball",
         "Visualizer",
+        "Normalize Volume",
     ],
     anim_rows: [
         "Vis. Fluidity",
@@ -246,6 +247,7 @@ pub static EN: Strings = Strings {
         "Language",
         "Output Device",
         "Crossfade",
+        "Loudness Target",
     ],
     ref_rows: [
         "Open Settings",
@@ -367,6 +369,7 @@ pub static TR: Strings = Strings {
         "Soz Motoru",
         "Soz Kuresi",
         "Gorsellestirici",
+        "Ses Esitleme",
     ],
     anim_rows: [
         "Viz. Akiskanlik",
@@ -380,6 +383,7 @@ pub static TR: Strings = Strings {
         "Dil",
         "Ses Cikisi",
         "Capraz Gecis",
+        "Hedef Ses Duzeyi",
     ],
     ref_rows: [
         "Ayarlari Ac",

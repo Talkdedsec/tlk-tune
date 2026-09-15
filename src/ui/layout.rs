@@ -164,8 +164,14 @@ mod tests {
     fn transport_buttons_are_clickable() {
         let app = App::new();
         let l = layout_for(&app, 155);
-        assert_eq!(probe(&app, l.buttons[0].0 + 2, l.button_y), Target::Previous);
-        assert_eq!(probe(&app, l.buttons[1].0 + 2, l.button_y), Target::PlayPause);
+        assert_eq!(
+            probe(&app, l.buttons[0].0 + 2, l.button_y),
+            Target::Previous
+        );
+        assert_eq!(
+            probe(&app, l.buttons[1].0 + 2, l.button_y),
+            Target::PlayPause
+        );
         assert_eq!(probe(&app, l.buttons[2].0 + 2, l.button_y), Target::Next);
     }
 
@@ -197,7 +203,10 @@ mod tests {
         let l = layout_for(&app, 155);
         assert_eq!(probe(&app, 4, l.rows_y.0), Target::ListRow(0));
         assert_eq!(probe(&app, 4, l.rows_y.1), Target::ListRow(LIST_ROWS - 1));
-        assert_eq!(probe(&app, l.queue_x.0 + 4, l.rows_y.0), Target::QueueRow(0));
+        assert_eq!(
+            probe(&app, l.queue_x.0 + 4, l.rows_y.0),
+            Target::QueueRow(0)
+        );
     }
 
     #[test]
@@ -212,7 +221,10 @@ mod tests {
     fn the_disk_toggles_playback() {
         let app = App::new();
         let l = layout_for(&app, 155);
-        assert_eq!(probe(&app, l.disk_x.0 + 5, l.panel_y.0 + 5), Target::PlayPause);
+        assert_eq!(
+            probe(&app, l.disk_x.0 + 5, l.panel_y.0 + 5),
+            Target::PlayPause
+        );
     }
 }
 
