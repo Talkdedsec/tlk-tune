@@ -23,9 +23,15 @@ fn main() {
             print!("{}", app::App::new().preview(width, &query));
         }
         Some("--version") => println!("tlk-tune {}", env!("CARGO_PKG_VERSION")),
+        Some(path) if !path.starts_with('-') && std::path::Path::new(path).is_file() => {
+            let mut app = app::App::new();
+            app.open_on_start(std::path::PathBuf::from(path));
+            app.run();
+        }
         Some("--help") | Some("-h") => {
             println!("tlk-tune {}", env!("CARGO_PKG_VERSION"));
             println!("  tlk-tune              start the player");
+            println!("  tlk-tune <file>       play that file");
             println!("  tlk-tune --preview N [query]");
             println!("                        render one frame at width N and exit");
             println!("  tlk-tune --version");

@@ -171,6 +171,7 @@ sonucu mp3 olarak ilk müzik klasörüne kaydeder.
 ## Diğer bayraklar
 
 ```
+tlk-tune <dosya>                o dosyayı çalar, klasörünü kitaplığa ekler
 tlk-tune --preview 155          155 sütun genişliğinde tek kare basıp çıkar
 tlk-tune --preview 155 oguzhan  aynı kareyi arama uygulanmış hâlde basar
 tlk-tune --version
