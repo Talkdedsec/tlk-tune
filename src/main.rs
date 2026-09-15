@@ -1,6 +1,7 @@
 mod app;
 mod audio;
 mod config;
+mod install;
 mod lang;
 mod mediakeys;
 mod session;
@@ -19,6 +20,13 @@ fn main() {
     std::process::exit(0);
 }
 
+fn report(result: Result<String, String>) {
+    match result {
+        Ok(text) => println!("{text}"),
+        Err(text) => eprintln!("tlk-tune: {text}"),
+    }
+}
+
 fn run() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -32,6 +40,8 @@ fn run() {
             print!("{}", app::App::new().preview(width, &query));
         }
         Some("--version") => println!("tlk-tune {}", env!("CARGO_PKG_VERSION")),
+        Some("--install") => report(install::install()),
+        Some("--uninstall") => report(install::uninstall()),
         Some(path) if !path.starts_with('-') && std::path::Path::new(path).is_file() => {
             let mut app = app::App::new();
             app.open_on_start(std::path::PathBuf::from(path));
@@ -41,6 +51,8 @@ fn run() {
             println!("tlk-tune {}", env!("CARGO_PKG_VERSION"));
             println!("  tlk-tune              start the player");
             println!("  tlk-tune <file>       play that file");
+            println!("  tlk-tune --install    put tlk-tune on your PATH");
+            println!("  tlk-tune --uninstall  take it back off");
             println!("  tlk-tune --preview N [query]");
             println!("                        render one frame at width N and exit");
             println!("  tlk-tune --version");

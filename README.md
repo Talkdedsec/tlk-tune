@@ -57,7 +57,17 @@ cd tlk-tune
 cargo build --release
 ```
 
-The binary lands at `target/release/tlk-tune.exe`. Copy it anywhere on PATH.
+The binary lands at `target/release/tlk-tune.exe`. Then:
+
+```
+target\release\tlk-tune.exe --install
+```
+
+That copies it to `%LOCALAPPDATA%\Programs\tlk-tune`, puts that folder on your
+user PATH, drops a `tune.cmd` beside it so either name works, and adds a
+"Play with tlk-tune" entry to the right-click menu of audio files. Nothing
+needs administrator rights and `--uninstall` takes all of it back out. Open a
+new terminal afterwards and `tlk-tune` is there.
 
 Optional: install [yt-dlp](https://github.com/yt-dlp/yt-dlp) for online search,
 streaming and downloads.
@@ -172,6 +182,8 @@ folder.
 ## Other flags
 
 ```
+tlk-tune --install              put it on your PATH, both names
+tlk-tune --uninstall            take it back off
 tlk-tune <file>                 play that file, and add its folder
 tlk-tune --preview 155          render one frame at width 155 and exit
 tlk-tune --preview 155 oguzhan  render that frame with a search applied

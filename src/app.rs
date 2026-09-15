@@ -1697,6 +1697,10 @@ impl App {
     }
 
     pub fn run(&mut self) {
+        if !Console::available() {
+            eprintln!("tlk-tune: this needs a terminal - try --preview or --help");
+            return;
+        }
         let mut console = match Console::open() {
             Ok(c) => c,
             Err(e) => {
