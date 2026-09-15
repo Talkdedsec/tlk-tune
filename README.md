@@ -158,6 +158,9 @@ spreads each line's timing over its words by character count, so the highlight
 still moves word by word. Results are cached under
 `%LOCALAPPDATA%\tlk-tune\lyrics`.
 
+Published timings rarely match a rip of the same song, so `[` and `]` shift
+them a quarter second at a time and the shift is remembered per track.
+
 ## Online
 
 With `yt-dlp` on PATH, `/` then `s: query` searches. Playback streams over HTTP

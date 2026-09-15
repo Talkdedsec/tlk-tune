@@ -158,6 +158,9 @@ satırın süresi harf sayısına göre kelimelere dağıtılır, böylece vurgu
 kelime kelime ilerler. Sonuçlar `%LOCALAPPDATA%\tlk-tune\lyrics` altında
 saklanır.
 
+Yayınlanan zamanlamalar aynı şarkının rip'iyle genelde tutmaz; `[` ve `]`
+çeyrek saniyelik adımlarla kaydırır ve kaydırma parça başına hatırlanır.
+
 ## Çevrimiçi
 
 `yt-dlp` PATH'teyken `/` sonra `s: sorgu` arar. Çalma HTTP range istekleriyle
