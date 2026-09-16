@@ -236,6 +236,23 @@ da DejaVu Sans Mono gibi bir font gerekir. Konsol kod sayfasını program kendis
 UTF-8'e alır. Fare için terminalin fare raporlamasını desteklemesi yeterli;
 Windows Terminal ve conhost ikisi de destekler.
 
+## Bir şey ters gittiğinde
+
+| Gördüğün | Sebebi |
+| :--- | :--- |
+| Plak yerine kutu ya da soru işareti | Fontta braille yok. Cascadia Mono ve DejaVu Sans Mono'da var. |
+| `--install` sonrası `tlk-tune` bulunamıyor | PATH değişikliği sadece yeni terminallere ulaşır. Yeni bir tane aç. |
+| Ses yok, gerisi çalışıyor | Cihazı başka bir program tekelinde tutuyor ya da varsayılan değişti. Ayar ekranının ANIMATION sekmesindeki Ses Cikisi satırı gerçekte ne varsa aralarında gezdirir. |
+| Medya tuşları çalışmıyor | Başka bir çalar önce kaptı. İlk kaydeden, kapanana kadar elinde tutar. |
+| Sözler hiç gelmiyor | Parçanın yanında `.lrc` yok ve LRCLIB'de de kaydı yok. Gerçek başlık ve sanatçıyı yazan etiketler işi kolaylaştırır. |
+| Çevrimiçi arama boş dönüyor | `yt-dlp` PATH'te değil. Yerel tarafın tamamı onsuz çalışır. |
+| Kare kayıyor ya da yırtılıyor | Pencere düzenden kısa. Daraldıkça panel düşürür ama yaklaşık on iki satıra ihtiyacı var. |
+
+## Koda bakmak
+
+[docs/architecture.md](docs/architecture.md) haritadır: hangi modül ne yapar,
+hangi iş parçacığında çalışır ve bozulduğunda ses çıkarmayan kurallar neler.
+
 ## Lisans
 
 MIT. Bkz. [LICENSE](LICENSE).

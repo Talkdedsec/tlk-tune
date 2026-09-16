@@ -11,7 +11,7 @@ repository = "https://github.com/Talkdedsec/tlk-tune"
 homepage = "https://github.com/Talkdedsec/tlk-tune"
 keywords = ["music", "player", "terminal", "tui", "audio"]
 categories = ["command-line-utilities", "multimedia::audio"]
-exclude = ["/.github", "/assets/*.png"]
+exclude = ["/.github", "/assets/*.png", "/docs"]
 
 [[bin]]
 name = "tlk-tune"
