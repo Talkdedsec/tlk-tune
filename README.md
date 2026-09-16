@@ -236,6 +236,23 @@ Needs a terminal that draws braille and box-drawing glyphs. Windows Terminal
 works out of the box; classic `conhost` needs a font like Cascadia Mono or
 DejaVu Sans Mono. The player switches the console to UTF-8 itself.
 
+## When something is wrong
+
+| What you see | What it is |
+| :--- | :--- |
+| Boxes or question marks instead of the record | The font has no braille. Cascadia Mono and DejaVu Sans Mono do. |
+| `tlk-tune` not found after `--install` | The PATH change reaches new terminals only. Open a fresh one. |
+| No sound, everything else fine | Another program holds the device exclusively, or the default changed. The Output Device row on the settings screen's ANIMATION tab cycles through what is actually there. |
+| Media keys do nothing | Another player claimed them first. Whoever registers first keeps them until it exits. |
+| Lyrics never arrive | There is no `.lrc` beside the track and LRCLIB has nothing for it. Tags that name the real title and artist help. |
+| Online search says nothing found | `yt-dlp` is not on PATH. Everything local works without it. |
+| The frame scrolls or tears | The window is shorter than the layout. It sheds panels as it narrows, but it needs about twelve rows. |
+
+## Reading the code
+
+[docs/architecture.md](docs/architecture.md) is the map: what each module does,
+which thread it runs on, and the handful of rules that are silent when broken.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

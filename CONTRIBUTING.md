@@ -30,6 +30,12 @@ reaches the settings and the help overlay. `--config` points the whole profile
 somewhere else, which is how the screenshots in the README were taken without
 anybody's own library in them.
 
+## Finding your way around
+
+[docs/architecture.md](docs/architecture.md) has the module map, which
+thread each piece runs on, and how the audio path is put together. Worth
+ten minutes before changing anything in `audio/` or `ui/`.
+
 ## House rules
 
 A few of these exist because breaking them is silent rather than loud.
