@@ -1,84 +1,150 @@
+<div align="center">
+
 # tlk-tune
+
+### Masaüstü müzik çalarının yaptığı her şey, seksen sütunda.
+
+Renkli albüm kapağı. Söylenen kelimeyi takip eden sözler. 10 bantlı ekolayzer.
+Yayın standardında ses eşitleme.
+**Tek bir 5.5 MB exe** — ffmpeg yok, codec pack yok, çalışma zamanı yok.
 
 [![ci](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml/badge.svg)](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/Talkdedsec/tlk-tune)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
 [![license](https://img.shields.io/github/license/Talkdedsec/tlk-tune)](LICENSE)
+[![platform](https://img.shields.io/badge/windows-10%20%7C%2011-0a7bbb)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
 
-Windows için terminal müzik çalar. Tek exe, harici bağımlılık yok, klavye ve
-fare ile.
+**[İndir](https://github.com/Talkdedsec/tlk-tune/releases/latest)** ·
+[English](README.md) ·
+[Nasıl kurulu](docs/architecture.md)
 
-```
-tlk-tune
-```
+<img src="docs/player.png" width="900" alt="Çalan parça: albüm kapağı, künye, senkron sözler, dalga formu ve kitaplık listesi">
 
-[English](README.md)
+</div>
 
-![Çalar](docs/player.png)
+## Kimsenin beklemediği kısım
+
+Fareyle kullanılan bir metin programı.
+
+**Plağa tıkla**, durur. **Dalga formunu sürükle**, sarar. **Satıra bir kez
+tıkla** seçer, **bir daha tıkla** çalar, **sağ tıkla** sıraya alır.
+**Tekerleği çevir**, liste kayar. Ayar ekranındaki her renk, her anahtar, her
+kaydırak da tıklanabilir — istemedikçe hiçbir yapılandırma dosyası açman
+gerekmiyor.
+
+Klavye de hepsini yapar; `?` ikisini birden ekrana getirir.
 
 <details>
-<summary>Dahası</summary>
+<summary><b>Dört görüntü daha</b></summary>
 
-Aksanı yok sayan arama — düz klavyeyle yazılan `dunya`, `Dünya`'yı bulur:
+<br>
 
-![Arama](docs/search.png)
+Aksanı yok sayan arama — Türkçe karakteri olmayan bir klavyede yazılan
+`dunya`, `Dünya`'yı buluyor:
 
-Ayar ekranı: her renk canlı önizleme üstünde düzenlenir.
+<img src="docs/search.png" width="900" alt="Türkçe karakter kullanılmadan yazılmış aramayla süzülmüş kitaplık">
 
-![Ayarlar](docs/settings.png)
+Her renk canlı önizleme üstünde düzenleniyor, metin düzenleyici yok:
+
+<img src="docs/settings.png" width="900" alt="Ayar ekranının renkler sekmesi">
 
 `?` ile bütün tuşlar ve fare hareketleri:
 
-![Tuşlar](docs/help.png)
+<img src="docs/help.png" width="900" alt="Tuşları ve fare hareketlerini listeleyen yardım ekranı">
 
-Pencere daraldığında kendini toplar:
+Pencere daraldığında kendini topluyor:
 
-![Dar](docs/narrow.png)
+<img src="docs/narrow.png" width="620" alt="Aynı çalar 78 sütunda, liste sığacak şekilde kısaltılmış">
 
 </details>
 
+## Üç dakika
+
+1. `tlk-tune.exe`'yi
+   [son sürümden](https://github.com/Talkdedsec/tlk-tune/releases/latest) indir.
+2. Çalıştır. Hiçbir ayar yapılmamışken Müzik ve İndirilenler klasörlerini
+   tarar, yani genelde hemen çalacak bir şey bulunur.
+3. `?` bütün tuşları ve hareketleri gösterir. `s` ayarları açar; müziğinin
+   gerçekten durduğu klasörü KLASORLER sekmesinden gösterirsin.
+
+`%APPDATA%\tlk-tune` ve `%LOCALAPPDATA%\tlk-tune` dışına sen istemedikçe
+hiçbir şey yazılmaz; `--install` ayrı ve geri alınabilir bir adımdır.
+
 ## Ne yapar
 
-- Yerel dosyaları çalar (MP3, FLAC, WAV, OGG, Opus, M4A, AAC, AIFF); çözme
-  Rust içinde yapılır — ffmpeg yok, codec pack yok.
-- **Fareyle de kullanılır**: düğmelere tıkla, dalga formunu sürükleyip sar, ses
-  çubuğuna tıkla, satıra tıklayıp seç ve tekrar tıklayıp çal, sağ tıkla sıraya
-  ekle, tekerlekle kaydır.
-- Canlı FFT spektrumu; akıcılık, sönme hızı ve kıvam ayarlanabilir.
-- İlerleme çubuğu boyunca braille dalga formu, çözülmüş PCM'den üretilir.
-- Renk geçişli dönen plak.
-- Senkron sözler, aktif kelime vurgusuyla; yanındaki `.lrc` dosyasından ya da
-  LRCLIB'den.
-- Sıra, karıştır, tekrarla, klasör filtresi ve aksan tanımayan bulanık arama:
-  `oguzhan` yazınca `Oğuzhan`, `dunya` yazınca `Dünya` geliyor.
-- **Albüm kapağı** plağın yerinde, renkli olarak basılır; gömülü kapaktan ya da
-  yanındaki `cover.jpg` dosyasından gelir, kapak yoksa dönen plak kalır.
-- **10 bantlı ekolayzer**, hazır ayarlarla; ok tuşuyla ya da kaydırağa
-  tıklayarak.
-- **Boşluksuz** parça geçişi, istenirse 12 saniyeye kadar çapraz geçiş.
-- Pencereye uyar: kısa terminalde liste küçülür, yer kalmazsa plak paneli
-  çekilir — kare yukarı kaçmaz.
-- Uyku zamanlayıcısı ve çalanı gösteren pencere başlığı.
-- **Ses eşitleme**, EBU R 128'e göre: her parça bir kez ölçülüp aynı yükseklikte
-  çalınıyor, sert kırpma yerine yumuşak sınırlayıcı var.
-- **Beğeni, çalma sayısı ve görünümler**: `l` beğenir, `v` listeyi tümü /
-  beğeniler / en çok çalan / son çalanlar arasında çevirir. tlk-player
-  kuruluysa beğeniler ve sayaçlar ilk açılışta kendiliğinden aktarılır.
-- Başlıklar etiketlerden gelir; `001 - Sanatçı - Başlık.mp3` dolu bir klasör
-  dosya adı yerine gerçek başlıklarla okunur.
-- `yt-dlp` PATH'teyse çevrimiçi arama ve akış; olmasa da geri kalanı çalışır.
-- Türkçe ve İngilizce arayüz.
-- Uygulama içi ayar ekranı: her renk, anahtar, animasyon, müzik klasörü, ses
-  çıkışı ve kısayol — metin düzenleyiciye gerek yok.
-- m3u, m3u8 ve pls çalma listelerini klasör gibi okur.
-- Parçayı, konumu, sesi ve sırayı çalıştırmalar arasında hatırlar.
-- Terminal arka plandayken medya tuşları çalışır.
+### Ses
+
+- MP3, FLAC, WAV, OGG, Opus, M4A, AAC ve AIFF çalar; çözme Rust içinde yapılır.
+  ffmpeg yok, codec pack yok, yanına kurulacak hiçbir şey yok.
+- **Boşluksuz** parça geçişi — ses cihazı bir kez açılıp açık kalır — ve
+  istenirse 12 saniyeye kadar çapraz geçiş.
+- **10 bantlı ekolayzer**, 31 Hz ile 16 kHz arası ±12 dB, yedi hazır ayarla.
+  Ok tuşuyla ya da kaydırağı sürükleyerek. Düz eğri hesaplanmaz, atlanır.
+- **Ses eşitleme**, EBU R 128'e göre: her parça bir kez ölçülür ve sonrasında
+  hep aynı yükseklikte çalar, sert kırpma yerine yumuşak sınırlayıcıyla.
 - Kulaklık çıkarsa cihazı yeniden açıp devam eder.
 
-## Kurulum
+### Ekranda
 
-`tlk-tune.exe`'yi
-[son sürümden](https://github.com/Talkdedsec/tlk-tune/releases/latest) indir,
-ya da Rust araç zinciriyle kendin derle:
+- **Albüm kapağı** plağın yerinde, renkli olarak; dosyaya gömülü kapaktan ya da
+  yanındaki `cover.jpg`'den gelir. Kapak yoksa yerine boş kutu değil, dönen
+  prosedürel plak geçer.
+- **Senkron sözler**, o an söylenen kelime vurgulanmış hâlde; yanındaki `.lrc`
+  dosyasından ya da LRCLIB'den. Yayınlanan zamanlama senin kopyanla tutmazsa
+  parça başına kaydırılabilir.
+- Canlı FFT spektrumu (akıcılık, sönme ve kıvam ayarlanır), ilerleme çubuğu
+  boyunca parçanın tamamını gösteren braille dalga formu, sese tepki veren küre.
+- Pencereye uyar. Kısa terminalde liste küçülür, yer kalmazsa plak paneli
+  çekilir — kare yukarı kaçmaz.
+- **Yedi sekmeli ayar ekranı** — renkler, öğeler, animasyon, ekolayzer, müzik
+  klasörleri, tuşlar, hakkında — hepsi canlı önizleme üstünde fareyle
+  düzenlenir. Metin düzenleyiciye gerek yok.
+- Türkçe ve İngilizce, yeniden başlatmadan değişir.
+
+### Kitaplığın
+
+- Klasörler de `m3u`, `m3u8`, `pls` çalma listeleri de eşit derecede geçerli
+  kitaplık kökü sayılır.
+- Başlıklar etiketlerden gelir; `001 - Sanatçı - Başlık.mp3` dolu bir klasör
+  dosya adlarıyla değil gerçek başlıklarla okunur. Etiket okumaları boyut ve
+  değişiklik zamanına göre saklanır, yani büyük kitaplık bedelini bir kez öder.
+- **Arama aksan tanımaz**: `oguzhan` yazınca `Oğuzhan`, `dunya` yazınca
+  `Dünya` geliyor. Türkçe karakteri olmayan bir klavyede de çalışır.
+- Sıra, karıştır, tekrarla, klasör ve sanatçı filtresi, dört sıralama düzeni.
+- **Beğeni, çalma sayısı ve görünümler**: `l` beğenir, `v` listeyi tümü /
+  beğeniler / en çok çalan / son çalanlar arasında çevirir. İlk açılışta
+  tlk-player kuruluysa bunlar kendiliğinden aktarılır.
+- Parçayı, konumu, sesi ve sırayı çalıştırmalar arasında hatırlar.
+
+### Pencerenin dışında
+
+- Her yerde fare: düğmeler, sarma çubuğu olarak dalga formu, ses çubuğu,
+  satırlar, sıra, tekerlek, ayarlardaki her denetim.
+- Terminal arka plandayken medya tuşları çalışır.
+- Uyku zamanlayıcısı ve çalanı gösteren pencere başlığı.
+- `yt-dlp` PATH'teyse çevrimiçi arama, akış ve indirme. Geri kalan her şey
+  onsuz çalışır.
+- `--install` iki adla PATH'e koyar ve ses dosyalarının sağ tık menüsüne girdi
+  ekler, yönetici hakkı istemeden.
+
+## PATH'e koymak
+
+Exe bulunduğu yerden çalışır, yani bu adım isteğe bağlı. `tlk-tune`'un her
+terminalde çalışmasını istediğinde:
+
+```
+tlk-tune.exe --install
+```
+
+Kendini `%LOCALAPPDATA%\Programs\tlk-tune` altına kopyalar, o klasörü kullanıcı
+PATH'ine ekler, yanına `tune.cmd` koyar (kısa ad da çalışsın diye) ve ses
+dosyalarının sağ tık menüsüne "Play with tlk-tune" girdisi ekler. Yönetici
+hakkı gerekmez, `--uninstall` hepsini tek tek geri alır. Sonrasında yeni bir
+terminal aç, iki ad da orada.
+
+İsteğe bağlı: PATH'teki [yt-dlp](https://github.com/yt-dlp/yt-dlp) çevrimiçi
+aramayı, akışı ve indirmeyi açar.
+
+### Kendin derlemek
 
 ```
 git clone https://github.com/Talkdedsec/tlk-tune.git
@@ -86,21 +152,13 @@ cd tlk-tune
 cargo build --release
 ```
 
-İki durumda da tek bir exe çıkar ve bulunduğu yerden çalışır. PATH'e koymak
-için:
+Rust 1.88 ya da üstü. Çıktı `target\release\tlk-tune.exe`. Her sürüm etiketten
+CI tarafından derlenir ve yanında `SHA256SUMS` dosyasıyla gelir, yani indirilen
+dosya karşılaştırılabilir:
 
 ```
-tlk-tune.exe --install
+Get-FileHash tlk-tune.exe -Algorithm SHA256
 ```
-
-Exe'yi `%LOCALAPPDATA%\Programs\tlk-tune` altına kopyalar, o klasörü kullanıcı
-PATH'ine ekler, yanına `tune.cmd` koyar (iki adla da açılır) ve ses
-dosyalarının sağ tık menüsüne "Play with tlk-tune" girdisi ekler. Yönetici
-gerekmez, `--uninstall` hepsini geri alır. Yeni bir terminal aç, `tlk-tune`
-yazman yeterli.
-
-İsteğe bağlı: çevrimiçi arama, akış ve indirme için
-[yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
 ## Kısayollar
 

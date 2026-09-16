@@ -1,84 +1,150 @@
+<div align="center">
+
 # tlk-tune
+
+### Everything a desktop music player does, in eighty columns.
+
+Album art in colour. Lyrics that follow the word being sung. A ten-band
+equaliser. Loudness levelling to broadcast standard.
+**One 5.5 MB executable** — no ffmpeg, no codec pack, no runtime.
 
 [![ci](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml/badge.svg)](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/Talkdedsec/tlk-tune)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
 [![license](https://img.shields.io/github/license/Talkdedsec/tlk-tune)](LICENSE)
+[![platform](https://img.shields.io/badge/windows-10%20%7C%2011-0a7bbb)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
 
-A terminal music player for Windows. One executable, no runtime dependencies,
-keyboard and mouse.
+**[Download](https://github.com/Talkdedsec/tlk-tune/releases/latest)** ·
+[Türkçe](README.tr.md) ·
+[How it is built](docs/architecture.md)
 
-```
-tlk-tune
-```
+<img src="docs/player.png" width="900" alt="tlk-tune playing a track, with album art, metadata, synced lyrics, a waveform and the library list">
 
-[Türkçe](README.tr.md)
+</div>
 
-![The player](docs/player.png)
+## The part nobody expects
+
+It is a text program you can use with the mouse.
+
+**Click the record** to pause it. **Drag the waveform** to seek. **Click a row
+once** to select it and **again** to play it, **right-click** to queue it.
+**Roll the wheel** over the list. Every colour, every toggle, every slider on
+the settings screen is clickable too — there is no configuration file to open
+unless you want to.
+
+The keyboard does all of it as well, and `?` puts both on screen.
 
 <details>
-<summary>More of it</summary>
+<summary><b>Four more pictures</b></summary>
 
-Search that ignores accents — `dunya` typed on a plain keyboard finds `Dünya`:
+<br>
 
-![Searching](docs/search.png)
+Search that ignores accents — `dunya`, typed on a keyboard with no Turkish on
+it, finds `Dünya`:
 
-The settings screen, where every colour is edited against a live preview:
+<img src="docs/search.png" width="900" alt="The library filtered by a search typed without Turkish characters">
 
-![Settings](docs/settings.png)
+Every colour edited against a live preview, no text editor involved:
+
+<img src="docs/settings.png" width="900" alt="The settings screen on the colours tab">
 
 Every key and every gesture, on `?`:
 
-![Keys](docs/help.png)
+<img src="docs/help.png" width="900" alt="The help overlay listing keys and mouse gestures">
 
-And it folds down when the window is narrow:
+And it folds itself down when the window is narrow:
 
-![Narrow](docs/narrow.png)
+<img src="docs/narrow.png" width="620" alt="The same player at 78 columns, with the list truncated to fit">
 
 </details>
 
+## Three minutes
+
+1. Download `tlk-tune.exe` from the
+   [latest release](https://github.com/Talkdedsec/tlk-tune/releases/latest).
+2. Run it. With nothing configured it scans your Music and Downloads folders,
+   so there is usually something to play straight away.
+3. `?` shows every key and gesture. `s` opens the settings, where the PATHS
+   tab is how you point it at the folder your music really lives in.
+
+Nothing is written outside `%APPDATA%\tlk-tune` and `%LOCALAPPDATA%\tlk-tune`
+until you ask for it, and `--install` is a separate, reversible step.
+
 ## What it does
 
-- Plays local files (MP3, FLAC, WAV, OGG, Opus, M4A, AAC, AIFF) decoded
-  natively in Rust — no ffmpeg, no codec pack.
-- **Mouse driven as well as keyboard**: click the transport buttons, click or
-  drag the waveform to seek, click the volume bar, click a row to select and
-  again to play, right-click to queue, scroll to move through the list.
-- Live FFT spectrum with configurable fluidity, decay and viscosity.
-- Braille waveform across the progress bar, built from the decoded PCM.
-- Spinning record with a colour gradient.
-- Synced lyrics with active-word highlighting, from a sidecar `.lrc` or LRCLIB.
-- Queue, shuffle, repeat, folder filter, and a fuzzy search that ignores
-  accents, so `oguzhan` finds `Oguzhan` and `dunya` finds `Dunya`.
-- **Album art** drawn in colour where the record sits, from the cover embedded
-  in the file or a `cover.jpg` beside it; the spinning vinyl is the fallback.
-- **Ten-band equaliser** with presets, adjustable by arrow keys or by clicking
-  the slider.
-- **Gapless** track changes, and an optional crossfade up to twelve seconds.
-- Fits the window: the list shrinks on a short terminal and the record panel
-  steps aside rather than letting the frame scroll off the top.
-- A sleep timer, and a window title that says what is playing.
-- **Volume levelling** to EBU R 128: every track is measured once, then played
-  at a consistent loudness, with a soft limiter instead of hard clipping.
-- **Likes, play counts and views**: `l` likes a track, `v` cycles the list
-  between all, liked, most played and recently played. Likes and counts import
-  themselves from tlk-player on first run if it is installed.
-- Titles come from the tags, so a folder of `001 - Artist - Title.mp3` reads as
-  the titles rather than the filenames.
-- Online search and streaming when `yt-dlp` is on PATH; everything else works
-  without it.
-- English and Turkish interface.
-- An in-app settings screen: every colour, toggle, animation, music folder,
-  output device and hotkey — no text editor needed.
-- Reads m3u, m3u8 and pls playlists as if they were folders.
-- Remembers the track, position, volume and queue between runs.
-- Media keys work while the terminal is in the background.
+### Sound
+
+- Plays MP3, FLAC, WAV, OGG, Opus, M4A, AAC and AIFF, decoded natively in
+  Rust. No ffmpeg, no codec pack, nothing to install alongside.
+- **Gapless** track changes — the output device opens once and stays open —
+  and an optional crossfade of up to twelve seconds.
+- **Ten-band equaliser**, 31 Hz to 16 kHz at ±12 dB, with seven presets.
+  Adjustable by arrow key or by dragging the slider. Flat is bypassed, not
+  computed.
+- **Loudness levelling** to EBU R 128. Each track is measured once and played
+  at a consistent level ever after, with a soft limiter in place of clipping.
 - Survives an unplugged headset: it reopens the device and keeps going.
 
-## Install
+### On screen
 
-Download `tlk-tune.exe` from the
-[latest release](https://github.com/Talkdedsec/tlk-tune/releases/latest), or
-build it yourself with a Rust toolchain:
+- **Album art** in colour where the record sits, from the cover embedded in
+  the file or a `cover.jpg` beside it. A procedural spinning record is the
+  fallback, not a placeholder box.
+- **Synced lyrics** with the current word highlighted, from a sidecar `.lrc`
+  or from LRCLIB, and shiftable per track when the published timings do not
+  match your copy.
+- Live FFT spectrum with configurable fluidity, decay and viscosity; a braille
+  waveform of the whole track across the progress bar; a reactive sphere.
+- Fits the window. The list shrinks on a short terminal and the record panel
+  steps aside rather than letting the frame scroll off the top.
+- **A settings screen with seven tabs** — colours, elements, animation, the
+  equaliser, music folders, keys, about — all editable with the mouse against
+  a live preview. No text editor needed.
+- English and Turkish, switched without restarting.
+
+### Your library
+
+- Folders and `m3u`, `m3u8`, `pls` playlists are equally valid library roots.
+- Titles come from the tags, so a folder of `001 - Artist - Title.mp3` reads
+  as the titles rather than the filenames. Tag reads are cached by size and
+  modification time, so a large library only pays for it once.
+- **Search ignores accents**: `oguzhan` finds `Oğuzhan`, `dunya` finds
+  `Dünya`. Typing Turkish on a keyboard that has none of it still works.
+- Queue, shuffle, repeat, folder and artist filters, four sort orders.
+- **Likes, play counts and views**: `l` likes a track, `v` cycles the list
+  between all, liked, most played and recently played. On a first run these
+  import themselves from tlk-player if it happens to be installed.
+- Remembers the track, the position, the volume and the queue between runs.
+
+### Outside the window
+
+- Mouse everywhere: the transport buttons, the waveform as a seek bar, the
+  volume bar, rows, the queue, the wheel, every control in the settings.
+- Media keys work while the terminal is in the background.
+- A sleep timer, and a window title that says what is playing.
+- Online search, streaming and downloads when `yt-dlp` is on PATH. Everything
+  else works without it.
+- `--install` puts it on your PATH under two names and adds a right-click
+  entry for audio files, without administrator rights.
+
+## Putting it on your PATH
+
+The executable runs from wherever it sits, so this step is optional. When you
+want `tlk-tune` to work in any terminal:
+
+```
+tlk-tune.exe --install
+```
+
+It copies itself to `%LOCALAPPDATA%\Programs\tlk-tune`, adds that folder to
+your user PATH, drops a `tune.cmd` beside it so the short name works too, and
+adds a "Play with tlk-tune" entry to the right-click menu of audio files. No
+administrator rights, and `--uninstall` takes every part of it back out. Open
+a new terminal afterwards and both names are there.
+
+Optional: [yt-dlp](https://github.com/yt-dlp/yt-dlp) on PATH turns on online
+search, streaming and downloads.
+
+### Building it yourself
 
 ```
 git clone https://github.com/Talkdedsec/tlk-tune.git
@@ -86,21 +152,13 @@ cd tlk-tune
 cargo build --release
 ```
 
-Either way it is one executable and it runs from wherever it sits. To put it
-on your PATH:
+Rust 1.88 or newer. The binary lands at `target\release\tlk-tune.exe`. Every
+release is built by CI from the tag and ships with a `SHA256SUMS` file, so a
+download can be checked against it:
 
 ```
-tlk-tune.exe --install
+Get-FileHash tlk-tune.exe -Algorithm SHA256
 ```
-
-That copies it to `%LOCALAPPDATA%\Programs\tlk-tune`, puts that folder on your
-user PATH, drops a `tune.cmd` beside it so either name works, and adds a
-"Play with tlk-tune" entry to the right-click menu of audio files. Nothing
-needs administrator rights and `--uninstall` takes all of it back out. Open a
-new terminal afterwards and `tlk-tune` is there.
-
-Optional: install [yt-dlp](https://github.com/yt-dlp/yt-dlp) for online search,
-streaming and downloads.
 
 ## Keys
 
