@@ -139,6 +139,27 @@ fn walk(dir: &Path, depth: u32, out: &mut Vec<LocalTrack>) {
 
 /// Reads m3u, m3u8 and pls. Relative entries resolve against the playlist's own
 /// folder, which is how every player that writes them expects it.
+/// Writes an extended m3u8, which is the format every other player reads and
+/// the one this player already reads back as a library root.
+///
+/// Paths go in relative when the track sits under the playlist's own folder,
+/// so a music folder can be moved or copied somewhere else without the list
+/// pointing at where it used to be.
+pub fn write_playlist(list: &Path, tracks: &[(PathBuf, f64, String)]) -> std::io::Result<()> {
+    let base = list.parent().unwrap_or(Path::new("."));
+    let mut out = String::from("#EXTM3U\n");
+    for (path, seconds, label) in tracks {
+        let shown = path.strip_prefix(base).unwrap_or(path.as_path());
+        out.push_str(&format!("#EXTINF:{},{}\n", seconds.round() as i64, label));
+        out.push_str(&shown.to_string_lossy());
+        out.push('\n');
+    }
+    if let Some(parent) = list.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(list, out)
+}
+
 pub fn read_playlist(list: &Path) -> Vec<LocalTrack> {
     let Ok(text) = std::fs::read_to_string(list) else {
         return Vec::new();
@@ -375,5 +396,39 @@ mod tests {
     #[test]
     fn folding_does_not_merge_unrelated_words() {
         assert_eq!(match_score("zzz", "Dünya Boştur"), 0.0);
+    }
+
+    #[test]
+    fn a_written_playlist_reads_back_as_the_same_tracks() {
+        let dir = std::env::temp_dir().join(format!("tlk-tune-list-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(dir.join("sub"));
+        let one = dir.join("first.mp3");
+        let two = dir.join("sub").join("second.flac");
+        std::fs::write(&one, b"x").unwrap();
+        std::fs::write(&two, b"x").unwrap();
+
+        let list = dir.join("night.m3u8");
+        write_playlist(
+            &list,
+            &[
+                (one.clone(), 214.4, "Talkdedsec - Neon Terminal".into()),
+                (two.clone(), 187.0, "Talkdedsec - Raw Mode".into()),
+            ],
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&list).unwrap();
+        assert!(text.starts_with("#EXTM3U\n"));
+        assert!(text.contains("#EXTINF:214,Talkdedsec - Neon Terminal"));
+        // Under the playlist's own folder, so relative rather than absolute.
+        assert!(text.contains("\nfirst.mp3\n"), "{text}");
+        assert!(!text.contains(&dir.to_string_lossy().to_string()), "{text}");
+
+        let back = read_playlist(&list);
+        assert_eq!(back.len(), 2);
+        assert_eq!(back[0].path, one);
+        assert_eq!(back[1].path, two);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

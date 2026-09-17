@@ -106,16 +106,21 @@ written down and, where possible, tested.
   `config::render`.** The file is rewritten on exit, so a key that only parses
   is a setting that quietly disappears. `saving_and_loading_keeps_every_setting`
   holds the line.
-- **Nothing allocates or locks in the audio callback.** `PcmStream` reserves
-  its capacity from the container's duration and never grows.
+- **Nothing allocates or locks in the audio callback.** `PcmStream` grows in
+  blocks, but only the decoder thread ever takes one; the callback reads what
+  has been published and nothing more.
 - **Tests touch nothing on the machine.** `App::headless()` exists because
   `App::new()` probes audio devices and claims the media keys, which crashes a
   runner with no sound card.
 
 ## Decoding and memory
 
-A track is decoded once into a `PcmStream` sized from the duration in the
-container, converted to the device's rate and channel count on the way in.
+A track is decoded once into a `PcmStream`, converted to the device's rate and
+channel count on the way in. The duration in the container decides how much is
+reserved up front, not how much can be played: the buffer is half-megabyte
+blocks taken as they are needed, which is why a live stream that will not say
+how long it is no longer stops after ten minutes.
+
 Playback reads it while it is still filling, and seeking is clamped to what has
 arrived so it can never land in silence. The waveform is built by streaming
 over that same buffer rather than materialising a second copy — an hour of

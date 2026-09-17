@@ -1082,6 +1082,8 @@ impl App {
             self.filter_to_artist();
         } else if key == Key::Char('t') {
             self.cycle_sleep_timer();
+        } else if key == Key::Char('w') {
+            self.write_playlist();
         } else if key == Key::Char('[') {
             self.nudge_lyrics(-0.25);
         } else if key == Key::Char(']') {
@@ -1103,6 +1105,78 @@ impl App {
             self.selected = 0;
             self.scroll = 0;
             self.refresh_view();
+        }
+    }
+
+    /// Keeps what is on screen. The queue if one has been built, otherwise
+    /// whatever the list is showing, which after a search or a filter is a
+    /// selection somebody made rather than the whole library.
+    fn write_playlist(&mut self) {
+        let from_queue = !self.queue.is_empty();
+        let tracks: Vec<(PathBuf, f64, String)> = if from_queue {
+            self.queue
+                .iter()
+                .filter_map(|item| {
+                    let path = item.path.clone()?;
+                    let seconds = self
+                        .row_meta
+                        .get(&path)
+                        .map(|m| m.duration)
+                        .unwrap_or_default();
+                    Some((path, seconds, item.title.clone()))
+                })
+                .collect()
+        } else {
+            self.view
+                .iter()
+                .map(|track| {
+                    let seconds = self
+                        .row_meta
+                        .get(&track.path)
+                        .map(|m| m.duration)
+                        .unwrap_or_default();
+                    let label = format!(
+                        "{} - {}",
+                        self.display_artist(track),
+                        self.display_title(track)
+                    );
+                    (track.path.clone(), seconds, label)
+                })
+                .collect()
+        };
+
+        if tracks.is_empty() {
+            self.status = self.lang.playlist_empty.to_string();
+            return;
+        }
+
+        let Some(folder) = self.roots().first().map(|r| paths::expand(r)) else {
+            self.status = self.lang.playlist_nowhere.to_string();
+            return;
+        };
+        // A playlist file is not a folder, so its own folder is the target.
+        let folder = if folder.is_dir() {
+            folder
+        } else {
+            folder.parent().map(|p| p.to_path_buf()).unwrap_or(folder)
+        };
+
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let file = folder.join(format!("tlk-tune-{stamp}.m3u8"));
+
+        match local::write_playlist(&file, &tracks) {
+            Ok(()) => {
+                self.status = format!(
+                    "{} {} -> {}",
+                    tracks.len(),
+                    self.lang.playlist_saved,
+                    file.display()
+                )
+            }
+            Err(e) => self.status = format!("{}: {e}", self.lang.playlist_failed),
         }
     }
 

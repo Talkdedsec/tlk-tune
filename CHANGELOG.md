@@ -22,6 +22,16 @@ All notable changes to this project are recorded here. The format follows
   desktop entry on Linux so a file manager offers it for audio files.
 - Releases carry a `SHA256SUMS` file, and CI checks the declared minimum Rust
   version and the advisory database.
+- `w` saves the queue, or whatever the list is showing after a search or a
+  filter, as an extended `m3u8` beside your music. Paths are written
+  relative where they can be, so moving the folder does not break the list.
+
+### Changed
+
+- The PCM buffer is taken in blocks rather than one allocation sized from
+  the duration in the container. A stream that would not say how long it
+  was used to stop after ten minutes, and a short track paid for a long
+  one.
 
 ### Fixed
 

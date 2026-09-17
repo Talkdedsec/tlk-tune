@@ -112,6 +112,9 @@ hiçbir şey yazılmaz; `--install` ayrı ve geri alınabilir bir adımdır.
 - **Arama aksan tanımaz**: `oguzhan` yazınca `Oğuzhan`, `dunya` yazınca
   `Dünya` geliyor. Türkçe karakteri olmayan bir klavyede de çalışır.
 - Sıra, karıştır, tekrarla, klasör ve sanatçı filtresi, dört sıralama düzeni.
+- **Kurduğunu sakla**: `w`, sırayı — ya da arama/filtre sonrası listede ne
+  duruyorsa onu — müziğinin yanına `m3u8` olarak yazar. Yollar göreli
+  yazılır, yani klasör taşınınca liste bozulmaz.
 - **Beğeni, çalma sayısı ve görünümler**: `l` beğenir, `v` listeyi tümü /
   beğeniler / en çok çalan / son çalanlar arasında çevirir. İlk açılışta
   tlk-player kuruluysa bunlar kendiliğinden aktarılır.
@@ -185,6 +188,7 @@ Get-FileHash tlk-tune.exe -Algorithm SHA256
 | Sırayı yeniden dizle | `Shift+↑` / `Shift+↓` |
 | Sözleri kaydır | `[` / `]` |
 | Uyku zamanlayıcısı | `t` |
+| Listeyi çalma listesi olarak kaydet | `w` |
 | Tüm tuşlar, ekranda | `?` |
 | Akışı indir | `y` |
 | Ayarlar | `s` |
