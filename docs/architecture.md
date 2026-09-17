@@ -14,10 +14,10 @@ src/
   config.rs       the settings file: parse and render, kept symmetrical
   session.rs      what was playing, so the next start continues it
   lang.rs         every string, twice, English and Turkish
-  install.rs      PATH, the shim, the right-click entry, all per user
+  install.rs      PATH and file association, per user, per platform
   terminal.rs     raw mode, UTF-8, the alternate screen, the window title
   text.rs         width and truncation that understand escapes and wide glyphs
-  mediakeys.rs    the media keys, claimed globally
+  mediakeys.rs    the media keys, claimed globally; Windows only so far
 
   audio/
     player.rs     the mixer, the decks, the crossfade, the output device
@@ -43,7 +43,8 @@ src/
 
   visual/
     disk.rs       the procedural record, drawn in braille
-    artwork.rs    cover art into half-block cells
+    artwork.rs    cover art into half-block cells, or into a real picture
+    graphics.rs   kitty and sixel, and the encoder sixel needs
     spectrum.rs   the FFT and its bars
     waveform.rs   the whole track reduced to one strip
     sphere.rs     the reactive sphere
@@ -54,7 +55,7 @@ src/
 **The main thread** owns everything in `App` and runs a 40 ms frame: read
 input, drain the channel, redraw. It never blocks on IO and never decodes.
 
-**The audio callback**, on cpal's WASAPI thread, is the only place that must
+**The audio callback**, on cpal's own thread, is the only place that must
 be fast. It allocates nothing and locks nothing:
 
 ```
@@ -77,7 +78,7 @@ channel as `Message` values that the main loop drains:
 | :--- | :--- |
 | decode | fills `PcmStream`; playback starts before it finishes |
 | waveform | `Waveform`, then `Loudness` once it has the whole track |
-| artwork | `Artwork`, from the tag or a cover beside the file |
+| artwork | `Artwork` as cells, and `ArtImage` where a real picture can be drawn |
 | lyrics | `Lyrics`, from the sidecar, the cache, or LRCLIB |
 | library scan | `Library`, then `RowMeta` per row as tags are read |
 | online | `SearchResults`, `Resolved` |

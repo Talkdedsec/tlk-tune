@@ -87,8 +87,11 @@ until you ask for it, and `--install` is a separate, reversible step.
 ### On screen
 
 - **Album art** in colour where the record sits, from the cover embedded in
-  the file or a `cover.jpg` beside it. A procedural spinning record is the
-  fallback, not a placeholder box.
+  the file or a `cover.jpg` beside it. In a terminal that speaks kitty's
+  graphics protocol or sixel — Windows Terminal, kitty, WezTerm, Ghostty,
+  foot, xterm — it is a real picture at real resolution rather than
+  coloured blocks. A procedural spinning record is the fallback when there
+  is no cover at all, not a placeholder box.
 - **Synced lyrics** with the current word highlighted, from a sidecar `.lrc`
   or from LRCLIB, and shiftable per track when the published timings do not
   match your copy.

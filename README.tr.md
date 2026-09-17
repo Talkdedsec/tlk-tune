@@ -86,8 +86,10 @@ hiçbir şey yazılmaz; `--install` ayrı ve geri alınabilir bir adımdır.
 ### Ekranda
 
 - **Albüm kapağı** plağın yerinde, renkli olarak; dosyaya gömülü kapaktan ya da
-  yanındaki `cover.jpg`'den gelir. Kapak yoksa yerine boş kutu değil, dönen
-  prosedürel plak geçer.
+  yanındaki `cover.jpg`'den gelir. Kitty grafik protokolünü ya da sixel'i
+  konuşan bir terminalde — Windows Terminal, kitty, WezTerm, Ghostty, foot,
+  xterm — renkli bloklar değil, gerçek çözünürlükte gerçek bir resim basar.
+  Hiç kapak yoksa yerine boş kutu değil, dönen prosedürel plak geçer.
 - **Senkron sözler**, o an söylenen kelime vurgulanmış hâlde; yanındaki `.lrc`
   dosyasından ya da LRCLIB'den. Yayınlanan zamanlama senin kopyanla tutmazsa
   parça başına kaydırılabilir.

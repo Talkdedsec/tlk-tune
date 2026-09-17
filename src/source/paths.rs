@@ -9,10 +9,16 @@ pub fn expand(raw: &str) -> PathBuf {
         return PathBuf::new();
     }
 
+    // A backslash separates folders on Windows and is an ordinary character
+    // in a unix filename, so `~\Music` is only a home path on one of them.
+    let separates = |rest: &str| {
+        rest.is_empty() || rest.starts_with('/') || (cfg!(windows) && rest.starts_with('\\'))
+    };
+
     let mut text = String::with_capacity(trimmed.len());
     if let Some(rest) = trimmed.strip_prefix('~') {
         match dirs::home_dir() {
-            Some(home) if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') => {
+            Some(home) if separates(rest) => {
                 text.push_str(&home.to_string_lossy());
                 text.push_str(rest);
             }
@@ -105,7 +111,12 @@ mod tests {
     fn expands_home() {
         let home = dirs::home_dir().unwrap();
         assert_eq!(expand("~/Music"), home.join("Music"));
-        assert_eq!(expand("~\\Music"), home.join("Music"));
+        if cfg!(windows) {
+            assert_eq!(expand("~\\Music"), home.join("Music"));
+        } else {
+            // Not a separator here, so it is a folder with an odd name.
+            assert_eq!(expand("~\\Music"), PathBuf::from("~\\Music"));
+        }
     }
 
     #[test]
