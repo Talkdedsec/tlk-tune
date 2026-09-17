@@ -59,6 +59,14 @@ And it folds itself down when the window is narrow:
 
 ## Three minutes
 
+On Windows, [scoop](https://scoop.sh) can do the whole thing:
+
+```
+scoop install https://github.com/Talkdedsec/tlk-tune/releases/latest/download/tlk-tune.json
+```
+
+Otherwise:
+
 1. Download the build for your system from the
    [latest release](https://github.com/Talkdedsec/tlk-tune/releases/latest).
    Windows is where it has lived longest; Linux and macOS builds are newer

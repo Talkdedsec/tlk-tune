@@ -144,6 +144,79 @@ jobs:
             echo "Get-FileHash <file> -Algorithm SHA256   # windows"
             echo '```'
           } >> notes.md
+      - name: Package manifests, built from the binaries that just shipped
+        shell: bash
+        run: |
+          set -e
+          version="${GITHUB_REF_NAME#v}"
+          base="https://github.com/Talkdedsec/tlk-tune/releases/download/${GITHUB_REF_NAME}"
+          exe="tlk-tune-windows-x86_64.exe"
+          hash=$(sha256sum "dist/$exe" | cut -d' ' -f1)
+
+          # Scoop reads one file. Pointing people at this asset means the hash
+          # can never drift from the binary it describes.
+          cat > "dist/tlk-tune.json" <<JSON
+          {
+            "version": "$version",
+            "description": "Terminal music player: album art, synced lyrics, ten-band equaliser.",
+            "homepage": "https://github.com/Talkdedsec/tlk-tune",
+            "license": "MIT",
+            "architecture": {
+              "64bit": {
+                "url": "$base/$exe#/tlk-tune.exe",
+                "hash": "$hash"
+              }
+            },
+            "bin": [["tlk-tune.exe", "tlk-tune"], ["tlk-tune.exe", "tune"]],
+            "checkver": "github",
+            "autoupdate": {
+              "architecture": {
+                "64bit": {
+                  "url": "https://github.com/Talkdedsec/tlk-tune/releases/download/v\$version/tlk-tune-windows-x86_64.exe#/tlk-tune.exe"
+                }
+              }
+            }
+          }
+          JSON
+
+          # winget wants three files and a pull request to its own repository,
+          # so these are written ready to copy rather than submitted.
+          mkdir -p dist/winget
+          cat > dist/winget/Talkdedsec.tlk-tune.yaml <<YAML
+          PackageIdentifier: Talkdedsec.tlk-tune
+          PackageVersion: $version
+          DefaultLocale: en-US
+          ManifestType: version
+          ManifestVersion: 1.6.0
+          YAML
+          cat > dist/winget/Talkdedsec.tlk-tune.installer.yaml <<YAML
+          PackageIdentifier: Talkdedsec.tlk-tune
+          PackageVersion: $version
+          InstallerType: portable
+          Commands:
+            - tlk-tune
+            - tune
+          Installers:
+            - Architecture: x64
+              InstallerUrl: $base/$exe
+              InstallerSha256: ${hash^^}
+          ManifestType: installer
+          ManifestVersion: 1.6.0
+          YAML
+          cat > dist/winget/Talkdedsec.tlk-tune.locale.en-US.yaml <<YAML
+          PackageIdentifier: Talkdedsec.tlk-tune
+          PackageVersion: $version
+          PackageLocale: en-US
+          Publisher: Talkdedsec
+          PackageName: tlk-tune
+          License: MIT
+          ShortDescription: Terminal music player with album art, synced lyrics and a ten-band equaliser.
+          PackageUrl: https://github.com/Talkdedsec/tlk-tune
+          ManifestType: defaultLocale
+          ManifestVersion: 1.6.0
+          YAML
+
+          cd dist && tar -czf winget-manifests.tar.gz winget && rm -r winget
       - uses: softprops/action-gh-release@v3
         with:
           name: tlk-tune ${{ github.ref_name }}
