@@ -11,7 +11,7 @@ Yayın standardında ses eşitleme.
 [![ci](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml/badge.svg)](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/Talkdedsec/tlk-tune)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
 [![license](https://img.shields.io/github/license/Talkdedsec/tlk-tune)](LICENSE)
-[![platform](https://img.shields.io/badge/windows-10%20%7C%2011-0a7bbb)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
+[![platform](https://img.shields.io/badge/windows%20%C2%B7%20linux%20%C2%B7%20macos-0a7bbb)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
 
 **[İndir](https://github.com/Talkdedsec/tlk-tune/releases/latest)** ·
 [English](README.md) ·
@@ -59,8 +59,10 @@ Pencere daraldığında kendini topluyor:
 
 ## Üç dakika
 
-1. `tlk-tune.exe`'yi
+1. Sistemine uygun sürümü
    [son sürümden](https://github.com/Talkdedsec/tlk-tune/releases/latest) indir.
+   En çok Windows'ta yaşadı; Linux ve macOS derlemeleri daha yeni ve daha az
+   yol katetti.
 2. Çalıştır. Hiçbir ayar yapılmamışken Müzik ve İndirilenler klasörlerini
    tarar, yani genelde hemen çalacak bir şey bulunur.
 3. `?` bütün tuşları ve hareketleri gösterir. `s` ayarları açar; müziğinin
@@ -142,11 +144,14 @@ terminalde çalışmasını istediğinde:
 tlk-tune.exe --install
 ```
 
-Kendini `%LOCALAPPDATA%\Programs\tlk-tune` altına kopyalar, o klasörü kullanıcı
-PATH'ine ekler, yanına `tune.cmd` koyar (kısa ad da çalışsın diye) ve ses
-dosyalarının sağ tık menüsüne "Play with tlk-tune" girdisi ekler. Yönetici
-hakkı gerekmez, `--uninstall` hepsini tek tek geri alır. Sonrasında yeni bir
-terminal aç, iki ad da orada.
+Windows'ta kendini `%LOCALAPPDATA%\Programs\tlk-tune` altına kopyalar, o
+klasörü kullanıcı PATH'ine ekler, yanına `tune.cmd` koyar (kısa ad da çalışsın
+diye) ve ses dosyalarının sağ tık menüsüne "Play with tlk-tune" girdisi ekler.
+Linux ve macOS'ta `~/.local/bin` altına girer, `tune` sembolik bağ olarak
+yanında durur; Linux'ta ayrıca masaüstü girdisi yazılır, dosya yöneticisi ses
+dosyalarında onu önersin diye. Hiçbirinde yönetici hakkı gerekmez,
+`--uninstall` hepsini tek tek geri alır. Sonrasında yeni bir terminal aç, iki
+ad da orada.
 
 İsteğe bağlı: PATH'teki [yt-dlp](https://github.com/yt-dlp/yt-dlp) çevrimiçi
 aramayı, akışı ve indirmeyi açar.
@@ -159,12 +164,14 @@ cd tlk-tune
 cargo build --release
 ```
 
-Rust 1.88 ya da üstü. Çıktı `target\release\tlk-tune.exe`. Her sürüm etiketten
-CI tarafından derlenir ve yanında `SHA256SUMS` dosyasıyla gelir, yani indirilen
-dosya karşılaştırılabilir:
+Rust 1.88 ya da üstü; Linux'ta ayrıca ALSA başlıkları (`libasound2-dev`).
+Çıktı `target/release` altına düşer. Her sürüm etiketten CI tarafından,
+platform başına bir ikili olarak derlenir ve yanında indirileni karşılaştırmak
+için `SHA256SUMS` gelir:
 
 ```
-Get-FileHash tlk-tune.exe -Algorithm SHA256
+sha256sum -c SHA256SUMS                  # linux, macos
+Get-FileHash <dosya> -Algorithm SHA256   # windows
 ```
 
 ## Kısayollar

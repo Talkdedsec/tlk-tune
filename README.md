@@ -11,7 +11,7 @@ equaliser. Loudness levelling to broadcast standard.
 [![ci](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml/badge.svg)](https://github.com/Talkdedsec/tlk-tune/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/Talkdedsec/tlk-tune)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
 [![license](https://img.shields.io/github/license/Talkdedsec/tlk-tune)](LICENSE)
-[![platform](https://img.shields.io/badge/windows-10%20%7C%2011-0a7bbb)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
+[![platform](https://img.shields.io/badge/windows%20%C2%B7%20linux%20%C2%B7%20macos-0a7bbb)](https://github.com/Talkdedsec/tlk-tune/releases/latest)
 
 **[Download](https://github.com/Talkdedsec/tlk-tune/releases/latest)** ·
 [Türkçe](README.tr.md) ·
@@ -59,8 +59,10 @@ And it folds itself down when the window is narrow:
 
 ## Three minutes
 
-1. Download `tlk-tune.exe` from the
+1. Download the build for your system from the
    [latest release](https://github.com/Talkdedsec/tlk-tune/releases/latest).
+   Windows is where it has lived longest; Linux and macOS builds are newer
+   and less travelled.
 2. Run it. With nothing configured it scans your Music and Downloads folders,
    so there is usually something to play straight away.
 3. `?` shows every key and gesture. `s` opens the settings, where the PATHS
@@ -143,11 +145,13 @@ want `tlk-tune` to work in any terminal:
 tlk-tune.exe --install
 ```
 
-It copies itself to `%LOCALAPPDATA%\Programs\tlk-tune`, adds that folder to
-your user PATH, drops a `tune.cmd` beside it so the short name works too, and
-adds a "Play with tlk-tune" entry to the right-click menu of audio files. No
-administrator rights, and `--uninstall` takes every part of it back out. Open
-a new terminal afterwards and both names are there.
+On Windows it copies itself to `%LOCALAPPDATA%\Programs\tlk-tune`, adds that
+folder to your user PATH, drops a `tune.cmd` beside it so the short name works
+too, and adds a "Play with tlk-tune" entry to the right-click menu of audio
+files. On Linux and macOS it goes to `~/.local/bin` with `tune` as a symlink,
+and on Linux it writes a desktop entry so a file manager offers it for audio.
+No administrator rights anywhere, and `--uninstall` takes every part of it back
+out. Open a new terminal afterwards and both names are there.
 
 Optional: [yt-dlp](https://github.com/yt-dlp/yt-dlp) on PATH turns on online
 search, streaming and downloads.
@@ -160,12 +164,13 @@ cd tlk-tune
 cargo build --release
 ```
 
-Rust 1.88 or newer. The binary lands at `target\release\tlk-tune.exe`. Every
-release is built by CI from the tag and ships with a `SHA256SUMS` file, so a
-download can be checked against it:
+Rust 1.88 or newer, and on Linux the ALSA headers (`libasound2-dev`). The
+binary lands in `target/release`. Every release is built by CI from the tag,
+one binary per platform, with a `SHA256SUMS` file to check a download against:
 
 ```
-Get-FileHash tlk-tune.exe -Algorithm SHA256
+sha256sum -c SHA256SUMS                  # linux, macos
+Get-FileHash <file> -Algorithm SHA256    # windows
 ```
 
 ## Keys
