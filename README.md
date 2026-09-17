@@ -113,6 +113,9 @@ until you ask for it, and `--install` is a separate, reversible step.
 - **Search ignores accents**: `oguzhan` finds `Oğuzhan`, `dunya` finds
   `Dünya`. Typing Turkish on a keyboard that has none of it still works.
 - Queue, shuffle, repeat, folder and artist filters, four sort orders.
+- **Keep what you built**: `w` writes the queue, or whatever the list is
+  showing after a search or a filter, as an `m3u8` beside your music. Paths
+  go in relative, so the folder can be moved without the list breaking.
 - **Likes, play counts and views**: `l` likes a track, `v` cycles the list
   between all, liked, most played and recently played. On a first run these
   import themselves from tlk-player if it happens to be installed.
@@ -186,6 +189,7 @@ Get-FileHash tlk-tune.exe -Algorithm SHA256
 | Reorder the queue | `Shift+↑` / `Shift+↓` |
 | Shift the lyrics | `[` / `]` |
 | Sleep timer | `t` |
+| Save the list as a playlist | `w` |
 | Every key, on screen | `?` |
 | Download stream | `y` |
 | Settings | `s` |
