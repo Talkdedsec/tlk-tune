@@ -4,13 +4,14 @@ use crate::config::{self, Config, LANGUAGES, LYRIC_ALIGNMENTS, LYRIC_ANIMATIONS,
 use crate::lang::Language;
 use crate::terminal::{Input, Key};
 use crate::text;
+use crate::visual::graphics;
 
 const RESET: &str = "\x1b[0m";
 const INVERT: &str = "\x1b[7m";
 const EDITING: &str = "\x1b[41;37m";
 const COLOUR_ROWS: usize = 14;
 const HOTKEY_ROWS: usize = 11;
-const ANIM_ROWS: usize = 12;
+const ANIM_ROWS: usize = 13;
 const ONOFF_ROWS: usize = 9;
 const PATH_FIELD: usize = 60;
 const EQ_ROWS: usize = eq::BANDS.len() + 1;
@@ -133,7 +134,14 @@ fn animation_value(app: &App, row: usize) -> String {
                 format!("{:.1} s", cfg.crossfade_ms as f32 / 1000.0)
             }
         }
-        _ => format!("{:.0} LUFS", cfg.normalize_target),
+        11 => format!("{:.0} LUFS", cfg.normalize_target),
+        _ => {
+            if cfg.art_mode.is_empty() {
+                format!("auto ({})", app.art_protocol.name())
+            } else {
+                cfg.art_mode.clone()
+            }
+        }
     }
 }
 
@@ -283,10 +291,11 @@ fn cycle(app: &mut App, direction: i32) {
                 app.cfg.crossfade_ms = next.clamp(0, 12_000) as u32;
                 app.player.set_crossfade_ms(app.cfg.crossfade_ms);
             }
-            _ => {
+            11 => {
                 app.cfg.normalize_target =
                     (app.cfg.normalize_target + direction as f64).clamp(-30.0, -6.0);
             }
+            _ => cycle_art_mode(app, direction),
         },
         TAB_EQ => {
             if row == 0 {
@@ -297,6 +306,24 @@ fn cycle(app: &mut App, direction: i32) {
         }
         _ => {}
     }
+}
+
+/// Walks the ways a cover can be drawn, with "auto" first: an empty setting
+/// is the one that asks the terminal rather than being told.
+fn cycle_art_mode(app: &mut App, direction: i32) {
+    const MODES: [&str; 4] = ["", "blocks", "kitty", "sixel"];
+    let current = MODES
+        .iter()
+        .position(|m| *m == app.cfg.art_mode)
+        .unwrap_or(0) as i32;
+    let next = (current + direction).rem_euclid(MODES.len() as i32) as usize;
+    app.cfg.art_mode = MODES[next].to_string();
+    app.art_protocol =
+        graphics::Protocol::parse(&app.cfg.art_mode).unwrap_or_else(graphics::detect);
+    // Whatever was on screen belongs to the old protocol.
+    app.art_image = None;
+    app.art_placed = false;
+    app.force_redraw();
 }
 
 /// Walks the real output list, with "system default" as the first entry.

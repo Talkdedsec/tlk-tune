@@ -40,7 +40,12 @@ pub fn metadata(app: &mut App, total_width: usize) -> Vec<String> {
     };
 
     let mut disk_frame: Vec<String> = Vec::new();
-    if cfg.show_disk {
+    if cfg.show_disk && app.art_image.is_some() {
+        // A real picture is already sitting in these cells. Stepping the
+        // cursor past them leaves it alone; writing spaces would rub it out
+        // and the next frame would have to send the whole image again.
+        disk_frame = vec![format!("\x1b[{disk_w}C"); panel_h];
+    } else if cfg.show_disk {
         // Cover art takes the record's place when the file has one; the
         // spinning vinyl is what a track without artwork falls back to.
         match app.artwork.as_ref().filter(|rows| rows.len() == panel_h) {

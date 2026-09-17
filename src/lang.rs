@@ -167,7 +167,7 @@ pub struct Strings {
     pub preview_lyric_c: &'static str,
 
     pub onoff_rows: [&'static str; 9],
-    pub anim_rows: [&'static str; 12],
+    pub anim_rows: [&'static str; 13],
     pub ref_rows: [&'static str; 11],
 }
 
@@ -334,6 +334,7 @@ pub static EN: Strings = Strings {
         "Output Device",
         "Crossfade",
         "Loudness Target",
+        "Album Art",
     ],
     ref_rows: [
         "Open Settings",
@@ -513,6 +514,7 @@ pub static TR: Strings = Strings {
         "Ses Cikisi",
         "Capraz Gecis",
         "Hedef Ses Duzeyi",
+        "Album Kapagi",
     ],
     ref_rows: [
         "Ayarlari Ac",

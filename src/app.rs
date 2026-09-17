@@ -24,7 +24,7 @@ use crate::ui::{self, settings_screen};
 use crate::visual::disk::Disk;
 use crate::visual::spectrum::Spectrum;
 use crate::visual::sphere::Sphere;
-use crate::visual::{artwork, waveform};
+use crate::visual::{artwork, graphics, waveform};
 
 /// The reference layout shows eight rows. The list only ever shrinks from
 /// there, so a short window degrades instead of scrolling the top away.
@@ -126,6 +126,7 @@ pub enum Message {
     Loudness(PathBuf, f64),
     DecodeFailed,
     Artwork(Vec<String>),
+    ArtImage(String),
     Status(String),
 }
 
@@ -162,6 +163,12 @@ pub struct App {
     pub current_path: Option<PathBuf>,
 
     pub artwork: Option<Vec<String>>,
+    /// The cover as a terminal graphics payload, when the terminal can
+    /// draw one. Held rather than redrawn because re-sending it every
+    /// frame would push megabytes a second at the terminal.
+    pub art_image: Option<String>,
+    pub art_placed: bool,
+    pub art_protocol: graphics::Protocol,
     pub waveform: Vec<f32>,
     pub waveform_ready: bool,
     pub waveform_at: Instant,
@@ -253,6 +260,11 @@ impl App {
         } else {
             70
         });
+        // An empty setting means the terminal gets asked; anything else is
+        // the user overriding that, including back to plain blocks.
+        let art_protocol =
+            graphics::Protocol::parse(&cfg.art_mode).unwrap_or_else(graphics::detect);
+
         let mut spectrum = Spectrum::new();
         spectrum.set_fluidity(cfg.viz_fluidity);
         spectrum.set_decay(cfg.viz_decay);
@@ -307,6 +319,9 @@ impl App {
             current_path: None,
 
             artwork: None,
+            art_image: None,
+            art_placed: false,
+            art_protocol,
             waveform: Vec::new(),
             waveform_ready: false,
             waveform_at: Instant::now(),
@@ -657,6 +672,8 @@ impl App {
         };
         self.has_track = true;
         self.artwork = None;
+        self.art_image = None;
+        self.art_placed = false;
         self.waveform.clear();
         self.waveform_ready = false;
         self.lyrics = Lyrics::default();
@@ -741,12 +758,19 @@ impl App {
             let art_tx = self.tx.clone();
             let cols = self.disk.width();
             let rows = self.disk.height();
+            let protocol = self.art_protocol;
+            let cell_px = self.cfg.cell_px;
             std::thread::spawn(move || {
                 let bytes = decoder::artwork(&art_source)
                     .or_else(|| artwork::beside_the_track(&art_source));
                 let Some(bytes) = bytes else { return };
+                // Blocks are built either way: they are what the panel falls
+                // back to if the terminal turns out not to draw the picture.
                 if let Some(cells) = artwork::render(&bytes, cols, rows) {
                     let _ = art_tx.send(Message::Artwork(cells));
+                }
+                if let Some(payload) = artwork::as_image(&bytes, cols, rows, protocol, cell_px) {
+                    let _ = art_tx.send(Message::ArtImage(payload));
                 }
             });
         }
@@ -985,6 +1009,12 @@ impl App {
             SortMode::Folder => self.lang.sort_folder,
             SortMode::Recent => self.lang.sort_recent,
         }
+    }
+
+    /// Asks for the next frame to be drawn from scratch rather than over
+    /// what is already there.
+    pub fn force_redraw(&mut self) {
+        self.force_redraw = true;
     }
 
     pub fn apply_language(&mut self, language: Language) {
@@ -1512,6 +1542,10 @@ impl App {
                     self.lyrics = result;
                 }
                 Message::Artwork(cells) => self.artwork = Some(cells),
+                Message::ArtImage(payload) => {
+                    self.art_image = Some(payload);
+                    self.art_placed = false;
+                }
                 Message::DecodeFailed => self.status = self.lang.decode_failed.to_string(),
                 Message::Loudness(path, lufs) => {
                     self.stats.set_loudness(&path, lufs);
@@ -1538,6 +1572,8 @@ impl App {
     /// player.
     pub fn preview(&mut self, width: usize, rows: usize, query: &str, screen: &str) -> String {
         self.last_width = width as i32;
+        // A frame on paper, so the picture protocols stay out of it.
+        self.art_protocol = graphics::Protocol::Blocks;
         if rows > 0 {
             self.last_height = rows.max(12);
             self.fit_to_height(self.last_height);
@@ -1695,6 +1731,17 @@ impl App {
             frame.push_str(&format!("  {}\n", self.status));
         }
         frame.push_str("\x1b[0J");
+
+        // The picture goes on last so nothing writes over it, and only when it
+        // is not already there: a clear screen wipes it, a new track replaces
+        // it, and otherwise it stays put for free.
+        if self.cfg.show_disk && (hard || !self.art_placed) {
+            if let Some(payload) = self.art_image.clone() {
+                frame.push_str(&graphics::move_to(2, 3));
+                frame.push_str(&payload);
+                self.art_placed = true;
+            }
+        }
         frame
     }
 
