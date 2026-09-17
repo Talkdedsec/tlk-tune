@@ -22,6 +22,8 @@ All notable changes to this project are recorded here. The format follows
   desktop entry on Linux so a file manager offers it for audio files.
 - Releases carry a `SHA256SUMS` file, and CI checks the declared minimum Rust
   version and the advisory database.
+- Sorting by album, which groups a library the way it was bought rather than
+  the way it was named. Files with no album tag group by folder instead.
 - `w` saves the queue, or whatever the list is showing after a search or a
   filter, as an extended `m3u8` beside your music. Paths are written
   relative where they can be, so moving the folder does not break the list.
