@@ -59,6 +59,14 @@ Pencere daraldığında kendini topluyor:
 
 ## Üç dakika
 
+Windows'ta [scoop](https://scoop.sh) hepsini tek seferde yapar:
+
+```
+scoop install https://github.com/Talkdedsec/tlk-tune/releases/latest/download/tlk-tune.json
+```
+
+Değilse:
+
 1. Sistemine uygun sürümü
    [son sürümden](https://github.com/Talkdedsec/tlk-tune/releases/latest) indir.
    En çok Windows'ta yaşadı; Linux ve macOS derlemeleri daha yeni ve daha az
