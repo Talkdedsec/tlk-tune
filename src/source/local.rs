@@ -21,6 +21,7 @@ pub struct LocalTrack {
 pub enum SortMode {
     Name,
     Artist,
+    Album,
     Folder,
     Recent,
 }
@@ -29,7 +30,8 @@ impl SortMode {
     pub fn next(self) -> SortMode {
         match self {
             SortMode::Name => SortMode::Artist,
-            SortMode::Artist => SortMode::Folder,
+            SortMode::Artist => SortMode::Album,
+            SortMode::Album => SortMode::Folder,
             SortMode::Folder => SortMode::Recent,
             SortMode::Recent => SortMode::Name,
         }
@@ -137,8 +139,6 @@ fn walk(dir: &Path, depth: u32, out: &mut Vec<LocalTrack>) {
     }
 }
 
-/// Reads m3u, m3u8 and pls. Relative entries resolve against the playlist's own
-/// folder, which is how every player that writes them expects it.
 /// Writes an extended m3u8, which is the format every other player reads and
 /// the one this player already reads back as a library root.
 ///
@@ -160,6 +160,8 @@ pub fn write_playlist(list: &Path, tracks: &[(PathBuf, f64, String)]) -> std::io
     std::fs::write(list, out)
 }
 
+/// Reads m3u, m3u8 and pls. Relative entries resolve against the playlist's own
+/// folder, which is how every player that writes them expects it.
 pub fn read_playlist(list: &Path) -> Vec<LocalTrack> {
     let Ok(text) = std::fs::read_to_string(list) else {
         return Vec::new();
@@ -208,12 +210,29 @@ pub fn read_playlist(list: &Path) -> Vec<LocalTrack> {
     out
 }
 
-pub fn sort(tracks: &mut [LocalTrack], mode: SortMode, artist_of: impl Fn(&LocalTrack) -> String) {
+pub fn sort(
+    tracks: &mut [LocalTrack],
+    mode: SortMode,
+    artist_of: impl Fn(&LocalTrack) -> String,
+    album_of: impl Fn(&LocalTrack) -> String,
+) {
     match mode {
         SortMode::Name => tracks.sort_by_key(|t| t.title.to_lowercase()),
         SortMode::Artist => {
             tracks.sort_by_key(|t| (artist_of(t).to_lowercase(), t.title.to_lowercase()))
         }
+        // An album with no tag falls back to the folder, which for a ripped
+        // album is the album, and keeps untagged files together rather than
+        // scattering them through everything else.
+        SortMode::Album => tracks.sort_by_key(|t| {
+            let album = album_of(t);
+            let key = if album.trim().is_empty() {
+                t.folder.clone()
+            } else {
+                album
+            };
+            (key.to_lowercase(), t.title.to_lowercase())
+        }),
         SortMode::Folder => {
             tracks.sort_by_key(|t| (t.folder.to_lowercase(), t.title.to_lowercase()))
         }
@@ -396,6 +415,35 @@ mod tests {
     #[test]
     fn folding_does_not_merge_unrelated_words() {
         assert_eq!(match_score("zzz", "Dünya Boştur"), 0.0);
+    }
+
+    #[test]
+    fn sorting_by_album_falls_back_to_the_folder() {
+        let make = |title: &str, folder: &str| LocalTrack {
+            path: PathBuf::from(format!("/music/{folder}/{title}.mp3")),
+            title: title.to_string(),
+            folder: folder.to_string(),
+            modified: SystemTime::UNIX_EPOCH,
+            size: 0,
+        };
+        let mut rows = vec![
+            make("zephyr", "Ripped Folder"),
+            make("alpha", "Other"),
+            make("beta", "Other"),
+        ];
+        // Only the last one carries a tag; the other two have to group by the
+        // folder they were ripped into or they scatter.
+        let album_of = |t: &LocalTrack| {
+            if t.title == "alpha" {
+                "Zzz Tagged".to_string()
+            } else {
+                String::new()
+            }
+        };
+        sort(&mut rows, SortMode::Album, |t| t.folder.clone(), album_of);
+
+        let order: Vec<&str> = rows.iter().map(|t| t.title.as_str()).collect();
+        assert_eq!(order, vec!["beta", "zephyr", "alpha"]);
     }
 
     #[test]

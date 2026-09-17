@@ -111,7 +111,9 @@ hiçbir şey yazılmaz; `--install` ayrı ve geri alınabilir bir adımdır.
   değişiklik zamanına göre saklanır, yani büyük kitaplık bedelini bir kez öder.
 - **Arama aksan tanımaz**: `oguzhan` yazınca `Oğuzhan`, `dunya` yazınca
   `Dünya` geliyor. Türkçe karakteri olmayan bir klavyede de çalışır.
-- Sıra, karıştır, tekrarla, klasör ve sanatçı filtresi, dört sıralama düzeni.
+- Sıra, karıştır, tekrarla, klasör ve sanatçı filtresi ve albüme göre sıralama
+  dahil beş sıralama düzeni — etiketi olmayan dosyalar klasöre düşer, çünkü
+  rip'lenmiş bir albüm genelde bir klasördür.
 - **Kurduğunu sakla**: `w`, sırayı — ya da arama/filtre sonrası listede ne
   duruyorsa onu — müziğinin yanına `m3u8` olarak yazar. Yollar göreli
   yazılır, yani klasör taşınınca liste bozulmaz.

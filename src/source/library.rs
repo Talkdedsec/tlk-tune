@@ -13,6 +13,10 @@ pub struct Entry {
     pub duration: f64,
     pub artist: String,
     pub title: String,
+    /// Older caches were written without this, so a missing album
+    /// is an empty string rather than a reason to reread the file.
+    #[serde(default)]
+    pub album: String,
     pub year: String,
     pub sample_rate: u32,
     pub channels: usize,

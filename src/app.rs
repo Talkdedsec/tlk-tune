@@ -107,6 +107,7 @@ pub struct RowMeta {
     pub duration: f64,
     pub artist: String,
     pub title: String,
+    pub album: String,
 }
 
 pub enum Message {
@@ -274,6 +275,7 @@ impl App {
             1 => SortMode::Artist,
             2 => SortMode::Folder,
             3 => SortMode::Recent,
+            4 => SortMode::Album,
             _ => SortMode::Name,
         };
         let queue = restored
@@ -422,6 +424,7 @@ impl App {
                         duration: entry.duration,
                         artist: entry.artist.clone(),
                         title: entry.title.clone(),
+                        album: entry.album.clone(),
                     };
                     if tx.send(Message::RowMeta(path.clone(), meta)).is_err() {
                         return;
@@ -439,6 +442,7 @@ impl App {
                         duration: info.duration,
                         artist: info.artist.clone(),
                         title: info.title.clone(),
+                        album: info.album.clone(),
                         year: info.year.clone(),
                         sample_rate: info.sample_rate,
                         channels: info.channels,
@@ -449,6 +453,7 @@ impl App {
                     duration: info.duration,
                     artist: info.artist,
                     title: info.title,
+                    album: info.album,
                 };
                 if tx.send(Message::RowMeta(path.clone(), meta)).is_err() {
                     return;
@@ -529,13 +534,24 @@ impl App {
                 }
                 _ => {
                     let lookup = self.row_meta.clone();
-                    local::sort(&mut rows, self.sort_mode, move |t| {
-                        lookup
-                            .get(&t.path)
-                            .map(|m| m.artist.clone())
-                            .filter(|a| !a.is_empty())
-                            .unwrap_or_else(|| t.folder.clone())
-                    });
+                    let albums = self.row_meta.clone();
+                    local::sort(
+                        &mut rows,
+                        self.sort_mode,
+                        move |t| {
+                            lookup
+                                .get(&t.path)
+                                .map(|m| m.artist.clone())
+                                .filter(|a| !a.is_empty())
+                                .unwrap_or_else(|| t.folder.clone())
+                        },
+                        move |t| {
+                            albums
+                                .get(&t.path)
+                                .map(|m| m.album.clone())
+                                .unwrap_or_default()
+                        },
+                    );
                 }
             }
         } else {
@@ -1009,6 +1025,7 @@ impl App {
         match self.sort_mode {
             SortMode::Name => self.lang.sort_name,
             SortMode::Artist => self.lang.sort_artist,
+            SortMode::Album => self.lang.sort_album,
             SortMode::Folder => self.lang.sort_folder,
             SortMode::Recent => self.lang.sort_recent,
         }
@@ -1666,6 +1683,7 @@ impl App {
                         duration: info.duration,
                         artist: info.artist,
                         title: info.title,
+                        album: info.album,
                     },
                 );
             }
@@ -1852,6 +1870,7 @@ impl App {
                 SortMode::Artist => 1,
                 SortMode::Folder => 2,
                 SortMode::Recent => 3,
+                SortMode::Album => 4,
             },
             queue: self
                 .queue

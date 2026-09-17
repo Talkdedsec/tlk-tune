@@ -112,7 +112,9 @@ until you ask for it, and `--install` is a separate, reversible step.
   modification time, so a large library only pays for it once.
 - **Search ignores accents**: `oguzhan` finds `Oğuzhan`, `dunya` finds
   `Dünya`. Typing Turkish on a keyboard that has none of it still works.
-- Queue, shuffle, repeat, folder and artist filters, four sort orders.
+- Queue, shuffle, repeat, folder and artist filters, and five sort orders
+  including by album — which falls back to the folder for untagged files,
+  since a ripped album is usually a folder.
 - **Keep what you built**: `w` writes the queue, or whatever the list is
   showing after a search or a filter, as an `m3u8` beside your music. Paths
   go in relative, so the folder can be moved without the list breaking.
