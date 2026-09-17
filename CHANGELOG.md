@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-17
+
 ### Added
 
 - The cover is drawn as a real picture in terminals that speak kitty's
@@ -102,5 +104,6 @@ First release.
   `tune`, and adds a right-click entry for audio files. `--uninstall` reverses
   all of it. Neither needs administrator rights.
 
-[Unreleased]: https://github.com/Talkdedsec/tlk-tune/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Talkdedsec/tlk-tune/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Talkdedsec/tlk-tune/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Talkdedsec/tlk-tune/releases/tag/v0.1.0
