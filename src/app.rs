@@ -708,10 +708,13 @@ impl App {
             let out = self.player.output();
             (out.sample_rate, out.channels)
         };
+        // Only a hint now: the buffer grows past it. When nothing knows the
+        // length, reserving a minute is enough to keep the decoder off the
+        // allocator while it finds its feet.
         let seconds = if info.duration > 0.0 {
             info.duration
         } else {
-            600.0
+            60.0
         };
         let pcm = Arc::new(PcmStream::with_seconds(seconds, rate, channels));
 

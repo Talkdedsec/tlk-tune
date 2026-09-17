@@ -6,6 +6,32 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The cover is drawn as a real picture in terminals that speak kitty's
+  graphics protocol or sixel, at the resolution the panel can actually hold
+  rather than one pixel per half cell. `AlbumArtMode` picks the protocol, or
+  leaves it to be worked out from the terminal; half blocks stay the default
+  and the fallback.
+- `--config <file>` points the whole profile — settings, session, statistics —
+  at another folder, so the player can run from a stick.
+- `--preview` takes `--rows` for a given window height and `--screen` for the
+  settings and help screens, and renders the frame the window really settles
+  on rather than an empty one.
+- Linux and macOS builds. `--install` has a unix half: `~/.local/bin`, plus a
+  desktop entry on Linux so a file manager offers it for audio files.
+- Releases carry a `SHA256SUMS` file, and CI checks the declared minimum Rust
+  version and the advisory database.
+
+### Fixed
+
+- `--preview` looked for a cover inside the file but not beside it, unlike the
+  player itself.
+- Whether a console was really attached was only ever checked on Windows, so
+  redirecting the output anywhere else would have drawn frames forever.
+- The manifest claimed a minimum Rust version that its own dependencies did
+  not support.
+
 ## [0.1.0] - 2026-09-16
 
 First release.
