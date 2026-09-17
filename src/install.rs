@@ -1,31 +1,154 @@
 //! Putting the player on PATH so `tlk-tune` works from any prompt.
 //!
-//! Everything here is per-user: the files land under LOCALAPPDATA and the
-//! registry writes go to HKCU, so no elevation is needed and `--uninstall`
-//! can take all of it back out.
+//! Everything here is per-user and needs no elevation, so `--uninstall` can
+//! take all of it back out. Windows makes a folder under LOCALAPPDATA, adds it
+//! to the user PATH and writes the right-click entry to HKCU. Unix uses
+//! ~/.local/bin, which is already a convention, and on Linux writes a desktop
+//! entry so a file manager knows what to offer.
 
 use std::path::{Path, PathBuf};
 
+#[cfg(windows)]
 const FOLDER: &str = "tlk-tune";
+#[cfg(windows)]
 const EXE: &str = "tlk-tune.exe";
+#[cfg(windows)]
 const SHIM: &str = "tune.cmd";
+#[cfg(windows)]
 const VERB: &str = "tlk-tune";
+#[cfg(windows)]
 const AUDIO: [&str; 9] = [
     ".mp3", ".flac", ".wav", ".ogg", ".opus", ".m4a", ".aac", ".aiff", ".wma",
 ];
 
+#[cfg(unix)]
+const EXE: &str = "tlk-tune";
+#[cfg(unix)]
+const SHIM: &str = "tune";
+
+/// Where the installed copy lives. Windows has nowhere on PATH by default, so
+/// the installer makes a folder and adds it. Unix already has a convention.
+#[cfg(windows)]
 pub fn target_dir() -> Option<PathBuf> {
     dirs::data_local_dir().map(|d| d.join("Programs").join(FOLDER))
 }
 
-#[cfg(not(windows))]
-pub fn install() -> Result<String, String> {
-    Err("only Windows for now".into())
+#[cfg(unix)]
+pub fn target_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".local").join("bin"))
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
+pub fn install() -> Result<String, String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let here = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = target_dir().ok_or("no home folder")?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let exe = dir.join(EXE);
+    if here != exe {
+        // Copying onto a binary that is currently executing corrupts the
+        // running image. Unlinking first leaves the old inode alive for
+        // whoever still has it open, which is the usual unix answer.
+        let _ = std::fs::remove_file(&exe);
+        std::fs::copy(&here, &exe).map_err(|e| format!("copy: {e}"))?;
+        let mut mode = std::fs::metadata(&exe)
+            .map_err(|e| e.to_string())?
+            .permissions();
+        mode.set_mode(0o755);
+        std::fs::set_permissions(&exe, mode).map_err(|e| e.to_string())?;
+    }
+
+    let shim = dir.join(SHIM);
+    let _ = std::fs::remove_file(&shim);
+    std::os::unix::fs::symlink(&exe, &shim).map_err(|e| format!("link: {e}"))?;
+
+    let mut told = format!("installed to {}", dir.display());
+    if desktop_entry(&exe).is_some() {
+        told.push_str(", and registered for audio files");
+    }
+    if !on_path(&dir) {
+        told.push_str(&format!(
+            "\n{} is not on your PATH. Add this to your shell profile:\n  export PATH=\"$HOME/.local/bin:$PATH\"",
+            dir.display()
+        ));
+    } else {
+        told.push_str("\nOpen a new shell and `tlk-tune` or `tune` will be there.");
+    }
+    Ok(told)
+}
+
+#[cfg(unix)]
 pub fn uninstall() -> Result<String, String> {
-    Err("only Windows for now".into())
+    let dir = target_dir().ok_or("no home folder")?;
+    let mut removed = 0;
+    for name in [EXE, SHIM] {
+        if std::fs::remove_file(dir.join(name)).is_ok() {
+            removed += 1;
+        }
+    }
+    if let Some(entry) = desktop_path() {
+        if std::fs::remove_file(entry).is_ok() {
+            removed += 1;
+        }
+    }
+    if removed == 0 {
+        return Ok("nothing was installed".into());
+    }
+    Ok(format!("removed {removed} files from {}", dir.display()))
+}
+
+#[cfg(unix)]
+fn on_path(dir: &Path) -> bool {
+    std::env::var_os("PATH")
+        .map(|value| std::env::split_paths(&value).any(|p| p == dir))
+        .unwrap_or(false)
+}
+
+/// The freedesktop equivalent of the right-click entry: a launcher that says
+/// which audio types it opens, so a file manager offers it.
+#[cfg(target_os = "linux")]
+fn desktop_path() -> Option<PathBuf> {
+    dirs::data_dir().map(|d| d.join("applications").join("tlk-tune.desktop"))
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn desktop_path() -> Option<PathBuf> {
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn desktop_entry(exe: &Path) -> Option<PathBuf> {
+    const MIME: &str = "audio/mpeg;audio/flac;audio/wav;audio/ogg;audio/opus;\
+                        audio/mp4;audio/aac;audio/x-aiff;";
+    let file = desktop_path()?;
+    std::fs::create_dir_all(file.parent()?).ok()?;
+    let body = format!(
+        "[Desktop Entry]\n\
+         Type=Application\n\
+         Name=tlk-tune\n\
+         Comment=Terminal music player\n\
+         Exec={} %f\n\
+         Terminal=true\n\
+         Categories=AudioVideo;Audio;Player;\n\
+         MimeType={MIME}\n",
+        exe.display()
+    );
+    std::fs::write(&file, body).ok()?;
+    // Best effort: without this a file manager may not notice until it is
+    // restarted, and its absence is not a reason to fail the install.
+    let _ = std::process::Command::new("update-desktop-database")
+        .arg(file.parent()?)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    Some(file)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn desktop_entry(_exe: &Path) -> Option<PathBuf> {
+    None
 }
 
 #[cfg(windows)]
@@ -254,10 +377,12 @@ mod registry {
 }
 
 /// Splits a PATH value, dropping the empties a trailing `;` leaves behind.
+#[cfg(windows)]
 fn path_entries(value: &str) -> Vec<&str> {
     value.split(';').filter(|p| !p.trim().is_empty()).collect()
 }
 
+#[cfg(windows)]
 fn same_folder(a: &str, b: &Path) -> bool {
     let a = a.trim().trim_end_matches(['\\', '/']).to_lowercase();
     let b = b
@@ -361,6 +486,7 @@ fn broadcast_environment_change() {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn path_entries_drop_the_empties() {
         assert_eq!(path_entries("a;b;;c;"), vec!["a", "b", "c"]);
@@ -368,23 +494,28 @@ mod tests {
         assert!(path_entries(";;").is_empty());
     }
 
+    #[cfg(windows)]
     #[test]
     fn folders_compare_without_case_or_trailing_slash() {
-        let dir = PathBuf::from("C:\\Users\\x\\AppData\\Local\\Programs\\tlk-tune");
+        let dir = PathBuf::from(r"C:\Users\x\AppData\Local\Programs\tlk-tune");
         assert!(same_folder(
-            "c:\\users\\x\\appdata\\local\\programs\\TLK-TUNE",
+            r"c:\users\x\appdata\local\programs\TLK-TUNE",
             &dir
         ));
         assert!(same_folder(
-            "C:\\Users\\x\\AppData\\Local\\Programs\\tlk-tune\\",
+            r#"C:\Users\x\AppData\Local\Programs\tlk-tune\"#,
             &dir
         ));
-        assert!(!same_folder("C:\\Users\\x\\AppData\\Local\\Programs", &dir));
+        assert!(!same_folder(r"C:\Users\x\AppData\Local\Programs", &dir));
     }
 
     #[test]
-    fn the_install_folder_sits_under_local_app_data() {
-        let dir = target_dir().expect("no local app data");
-        assert!(dir.ends_with("Programs\\tlk-tune") || dir.ends_with("Programs/tlk-tune"));
+    fn the_install_folder_is_somewhere_a_user_owns() {
+        let dir = target_dir().expect("no home folder");
+        if cfg!(windows) {
+            assert!(dir.ends_with("tlk-tune"));
+        } else {
+            assert!(dir.ends_with(".local/bin"));
+        }
     }
 }
