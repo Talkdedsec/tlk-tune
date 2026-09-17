@@ -1,6 +1,7 @@
 use image::imageops::FilterType;
 
 use crate::audio::decoder::Source;
+use crate::visual::graphics;
 
 const SIDECAR_NAMES: [&str; 6] = [
     "cover.jpg",
@@ -26,6 +27,50 @@ pub fn beside_the_track(source: &Source) -> Option<Vec<u8>> {
     }
     None
 }
+
+/// The same cover, but as a real picture for a terminal that can draw one.
+/// Kitty is given a PNG and a size in cells and does its own scaling; sixel
+/// needs the pixels, so the cell size has to be known.
+pub fn as_image(
+    bytes: &[u8],
+    cols: usize,
+    rows: usize,
+    protocol: graphics::Protocol,
+    cell_px: (u32, u32),
+) -> Option<String> {
+    if cols == 0 || rows == 0 {
+        return None;
+    }
+    let width = cols as u32 * cell_px.0.max(1);
+    let height = rows as u32 * cell_px.1.max(1);
+    let image = image::load_from_memory(bytes).ok()?;
+
+    match protocol {
+        graphics::Protocol::Blocks => None,
+        graphics::Protocol::Kitty => {
+            let scaled = image.resize_exact(width, height, FilterType::Lanczos3);
+            let mut png = Vec::new();
+            scaled
+                .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .ok()?;
+            Some(graphics::kitty(&png, cols, rows, ART_IMAGE_ID))
+        }
+        graphics::Protocol::Sixel => {
+            let scaled = image
+                .resize_exact(width, height, FilterType::Lanczos3)
+                .to_rgb8();
+            Some(graphics::sixel(
+                scaled.as_raw(),
+                width as usize,
+                height as usize,
+            ))
+        }
+    }
+}
+
+/// One id for the cover means a new track replaces the old picture instead of
+/// piling another one on top of it.
+const ART_IMAGE_ID: u32 = 7;
 
 /// Renders cover art into terminal cells using the upper half block, so each
 /// cell carries two pixels: the foreground paints the top, the background the

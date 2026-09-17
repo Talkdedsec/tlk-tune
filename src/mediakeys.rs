@@ -1,5 +1,9 @@
 use std::sync::mpsc::Sender;
 
+// Off Windows nothing constructs these yet: the transport keys arrive through
+// MPRIS on Linux and through the now-playing centre on macOS, and neither is
+// wired up. The enum is the shape both of those will report in.
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum MediaKey {
     PlayPause,

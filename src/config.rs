@@ -183,6 +183,14 @@ pub struct Config {
     pub lyric_alignment: i32,
     pub lyric_animation: i32,
 
+    /// How the cover is drawn: half blocks everywhere, or a real
+    /// picture where the terminal speaks a graphics protocol. Empty
+    /// means ask the terminal what it is.
+    pub art_mode: String,
+    /// What one cell measures in pixels. Sixel places an image by
+    /// pixel size, so without this it cannot be made to fit the panel.
+    pub cell_px: (u32, u32),
+
     pub viz_fluidity: i32,
     pub viz_decay: i32,
     pub viz_viscosity: i32,
@@ -265,6 +273,8 @@ impl Default for Config {
 
             lyric_alignment: 0,
             lyric_animation: 1,
+            art_mode: String::new(),
+            cell_px: (10, 20),
 
             viz_fluidity: 10,
             viz_decay: 10,
@@ -577,6 +587,14 @@ pub fn parse(text: &str) -> Config {
 
             "ElimentDisk" => c.show_disk = as_bool(value),
             "ElimentAlbumArt" => c.show_album_art = as_bool(value),
+            "AlbumArtMode" => c.art_mode = unquote(value).to_string(),
+            "CellPixels" => {
+                if let Some((w, h)) = unquote(value).split_once('x') {
+                    if let (Ok(w), Ok(h)) = (w.trim().parse(), h.trim().parse()) {
+                        c.cell_px = (w, h);
+                    }
+                }
+            }
             "ElimentDummyButtons" => c.show_buttons = as_bool(value),
             "ElimentQueue" => c.show_queue = as_bool(value),
             "ElimentWaveForm" => c.show_waveform = as_bool(value),
@@ -809,6 +827,14 @@ pub fn render(c: &Config, location: &str) -> String {
         LYRIC_ANIMATIONS[c.lyric_animation.clamp(0, 4) as usize]
     ));
     o.push_str(&format!(
+        "AlbumArtMode={}\n## blocks , kitty , sixel ; empty asks the terminal\n",
+        c.art_mode
+    ));
+    o.push_str(&format!(
+        "CellPixels={}x{}\n## what one cell measures, only sixel needs it\n",
+        c.cell_px.0, c.cell_px.1
+    ));
+    o.push_str(&format!(
         "CrossfadeMs={}\n## 0 to 12000, 0 is gapless\n",
         c.crossfade_ms
     ));
@@ -877,6 +903,8 @@ mod tests {
         };
 
         c.show_disk = false;
+        c.art_mode = "sixel".into();
+        c.cell_px = (9, 18);
         c.show_album_art = false;
         c.show_buttons = false;
         c.show_queue = false;
