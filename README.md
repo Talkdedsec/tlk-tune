@@ -62,7 +62,8 @@ And it folds itself down when the window is narrow:
 On Windows, [scoop](https://scoop.sh) can do the whole thing:
 
 ```
-scoop install https://github.com/Talkdedsec/tlk-tune/releases/latest/download/tlk-tune.json
+scoop bucket add tlk https://github.com/Talkdedsec/scoop-tlk
+scoop install tlk/tlk-tune
 ```
 
 Otherwise:
