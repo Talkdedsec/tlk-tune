@@ -19,7 +19,7 @@ path = "src/main.rs"
 
 [dependencies]
 arc-swap = "1.7"
-crossterm = "0.28"
+crossterm = "0.29"
 cpal = "0.15"
 symphonia = { version = "0.5", features = ["all-codecs", "all-formats"] }
 realfft = "3.4"
