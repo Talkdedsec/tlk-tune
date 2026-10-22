@@ -219,6 +219,7 @@ jobs:
           cd dist && tar -czf winget-manifests.tar.gz winget && rm -r winget
       - uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
           name: tlk-tune ${{ github.ref_name }}
           body_path: notes.md
           files: dist/*
