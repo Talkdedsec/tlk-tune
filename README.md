@@ -337,3 +337,7 @@ which thread it runs on, and the handful of rules that are silent when broken.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+<p align="center">
+  <sub>Built by <a href="https://talkdedsec.com">Talkdedsec</a></sub>
+</p>
