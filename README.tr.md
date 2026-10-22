@@ -338,3 +338,7 @@ hangi iş parçacığında çalışır ve bozulduğunda ses çıkarmayan kuralla
 ## Lisans
 
 MIT. Bkz. [LICENSE](LICENSE).
+
+<p align="center">
+  <sub><a href="https://talkdedsec.com">Talkdedsec</a> tarafından yapıldı</sub>
+</p>
