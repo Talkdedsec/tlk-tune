@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tlk-tune — a whole music player in eighty columns</title>
+<meta name="description" content="Terminal music player for Windows, Linux and macOS. Album art in colour, word-synced lyrics, a ten-band equaliser and EBU R 128 loudness levelling, in one 5.5 MB executable with no ffmpeg.">
+<link rel="canonical" href="https://talkdedsec.github.io/tlk-tune/">
+<meta name="theme-color" content="#14100d">
+<meta name="color-scheme" content="dark">
+<meta property="og:type" content="website">
+<meta property="og:title" content="tlk-tune — a whole music player in eighty columns">
+<meta property="og:description" content="Album art, synced lyrics, a ten-band EQ and loudness levelling in one 5.5 MB terminal executable. Mouse and keyboard.">
+<meta property="og:url" content="https://talkdedsec.github.io/tlk-tune/">
+<meta property="og:image" content="https://talkdedsec.github.io/tlk-tune/og.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231b1613'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23ff8a1f'/%3E%3Ccircle cx='16' cy='16' r='1.5' fill='%231b1613'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"tlk-tune","applicationCategory":"MultimediaApplication","operatingSystem":"Windows, Linux, macOS","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"downloadUrl":"https://github.com/Talkdedsec/tlk-tune/releases/latest","author":{"@type":"Person","name":"Talkdedsec","url":"https://talkdedsec.com"}}
+</script>
+<script src="site.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+
+<div class="ruler" aria-hidden="true"><div class="ruler-ticks"></div><span class="ruler-cur"></span><span class="ruler-read">col 01</span></div>
+
+<header class="top">
+  <a class="brand" href="#top" aria-label="tlk-tune home"><span class="brand-dot"></span>tlk-tune</a>
+  <nav class="nav" aria-label="Sections">
+    <a href="#mouse" data-i18n="nav.mouse">Mouse</a>
+    <a href="#eq" data-i18n="nav.eq">Equaliser</a>
+    <a href="#keys" data-i18n="nav.keys">Keys</a>
+    <a href="#install" data-i18n="nav.install">Install</a>
+  </nav>
+  <div class="top-end">
+    <button class="lang" type="button" aria-label="Türkçe / English"><span data-l="en">EN</span><span data-l="tr">TR</span></button>
+    <a class="gh" href="https://github.com/Talkdedsec/tlk-tune" aria-label="Source on GitHub"><svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero" id="top">
+  <p class="over mono" data-i18n="hero.over">Terminal music player · Windows · Linux · macOS · MIT</p>
+  <h1 class="display">
+    <span class="line"><span data-i18n="hero.h1a">Everything a desktop</span></span>
+    <span class="line"><span data-i18n="hero.h1b">music player does,</span></span>
+    <span class="line accent"><em data-i18n="hero.h1c">in eighty columns.</em></span>
+  </h1>
+
+  <div class="hero-grid">
+    <div class="hero-copy">
+      <p class="lede" data-i18n="hero.lede">Album art in colour. Lyrics that follow the word being sung. A ten-band equaliser. Loudness levelling to broadcast standard.</p>
+      <p class="lede strong" data-i18n-html="hero.one"><b>One 5.5 MB executable</b> — no ffmpeg, no codec pack, no runtime.</p>
+      <div class="cta">
+        <a class="btn primary" id="dl" href="https://github.com/Talkdedsec/tlk-tune/releases/latest/download/tlk-tune-windows-x86_64.exe">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
+          <span id="dl-label" data-i18n="dl.win">Download for Windows</span>
+        </a>
+        <a class="btn ghost" href="#install" data-i18n="cta.other">Scoop, Linux, macOS</a>
+      </div>
+      <p class="hint mono" data-i18n-html="hero.hint">This player is live. <b>Click the record</b> to pause it, <b>drag the waveform</b> to seek, click a row twice to play it. <kbd>p</kbd> <kbd>n</kbd> <kbd>b</kbd> <kbd>←</kbd> <kbd>→</kbd> work too.</p>
+    </div>
+
+    <div class="term" role="group" aria-label="Interactive tlk-tune demo, no sound" data-i18n-aria="demo.aria">
+      <div class="term-bar"><i></i><i></i><i></i><span>tlk-tune</span><em class="mono" data-i18n="demo.silent">demo · silent</em></div>
+      <div class="term-body">
+        <div class="box now">
+          <button class="record" type="button" aria-pressed="true" aria-label="Pause" data-i18n-aria="demo.pause"><canvas width="48" height="48"></canvas></button>
+          <dl class="meta">
+            <div><dt>Name</dt><dd id="m-name">Neon Terminal</dd></div>
+            <div><dt>Artist</dt><dd>Talkdedsec</dd></div>
+            <div><dt>sampling</dt><dd>44100 Hz</dd></div>
+            <div><dt>format</dt><dd id="m-fmt">FLAC</dd></div>
+            <div><dt>file size</dt><dd id="m-size">4.0 MB</dd></div>
+            <div><dt>channels</dt><dd>16 bit</dd></div>
+          </dl>
+          <ol class="lyrics" aria-hidden="true"></ol>
+        </div>
+        <div class="row2">
+          <div class="box wave-box"><span class="lbl">PROGRESS BAR</span>
+            <div class="wave" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="214" aria-valuenow="0" aria-valuetext="0:00"></div>
+            <span class="lbl bot">[ <span id="t-now">00:00</span> ]─[ <span id="t-dur">03:34</span> ]</span>
+          </div>
+          <div class="ctrl">
+            <div class="btns">
+              <button type="button" class="tbtn" id="b-prev" aria-label="Previous">&lt;&lt;&lt;</button>
+              <button type="button" class="tbtn" id="b-play">PAUSE</button>
+              <button type="button" class="tbtn" id="b-next" aria-label="Next">&gt;&gt;&gt;</button>
+            </div>
+            <div class="vol" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="72">VOLUME BAR:[<span class="vol-on"></span><span class="vol-off"></span>] <span class="vol-n">72%</span></div>
+          </div>
+        </div>
+        <div class="box list"><span class="lbl">LOCAL AUDIO FILES (sort: recent)</span>
+          <ul class="rows"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mouse" id="mouse">
+  <div class="mouse-text">
+    <p class="over mono" data-i18n="mouse.over">01 — The part nobody expects</p>
+    <h2 class="h2 reveal"><span data-i18n="mouse.h">A text program you can use with the mouse.</span></h2>
+    <p class="body" data-i18n="mouse.p1">Click the record to pause it. Drag the waveform to seek. Click a row once to select it and again to play it, right-click to queue it. Roll the wheel over the list.</p>
+    <p class="body" data-i18n="mouse.p2">Every colour, every toggle, every slider on the settings screen is clickable too. There is no configuration file to open unless you want to. The keyboard does all of it as well, and ? puts both on screen.</p>
+  </div>
+  <div class="shots">
+    <figure class="shot reveal"><img src="search.png" width="1372" height="926" loading="lazy" alt="The library filtered by a search typed without Turkish characters" data-i18n-alt="shot.search.alt"><figcaption><span class="mono">a</span><span data-i18n-html="shot.search">Search that ignores accents: <code>dunya</code>, typed on a keyboard with no Turkish on it, finds <code>Dünya</code>.</span></figcaption></figure>
+    <figure class="shot reveal"><img src="settings.png" width="1372" height="638" loading="lazy" alt="The settings screen on the colours tab" data-i18n-alt="shot.settings.alt"><figcaption><span class="mono">b</span><span data-i18n="shot.settings">Every colour edited against a live preview. Seven tabs, no text editor.</span></figcaption></figure>
+    <figure class="shot reveal"><img src="help.png" width="1372" height="758" loading="lazy" alt="The help overlay listing keys and mouse gestures" data-i18n-alt="shot.help.alt"><figcaption><span class="mono">c</span><span data-i18n="shot.help">Every key and every gesture, one ? away.</span></figcaption></figure>
+    <figure class="shot narrow reveal"><img src="narrow.png" width="910" height="926" loading="lazy" alt="The same player at 78 columns, with the list truncated to fit" data-i18n-alt="shot.narrow.alt"><figcaption><span class="mono">d</span><span data-i18n="shot.narrow">It folds itself down when the window is narrow, instead of letting the frame scroll away.</span></figcaption></figure>
+  </div>
+</section>
+
+<section class="specs" aria-label="In numbers" data-i18n-aria="specs.aria">
+  <div class="spec reveal"><b class="num" data-to="5.5" data-dec="1">5.5</b><span class="unit">MB</span><p data-i18n="spec.size">One executable. That is the whole install.</p></div>
+  <div class="spec reveal"><b class="num" data-to="0">0</b><span class="unit" data-i18n="spec.codecs.u">codecs</span><p data-i18n="spec.codecs">to install. MP3 to AIFF, decoded natively in Rust.</p></div>
+  <div class="spec reveal"><b class="num" data-to="8">8</b><span class="unit" data-i18n="spec.formats.u">formats</span><p>MP3 · FLAC · WAV · OGG · Opus · M4A · AAC · AIFF</p></div>
+  <div class="spec reveal"><b class="num" data-to="-18">−18</b><span class="unit">LUFS</span><p data-i18n="spec.lufs">EBU R 128 levelling. Each track measured once, then never too loud again.</p></div>
+  <div class="spec reveal"><b class="num" data-to="12">12</b><span class="unit" data-i18n="spec.fade.u">second crossfade</span><p data-i18n="spec.fade">Gapless by default. The output device opens once and stays open.</p></div>
+  <div class="spec reveal"><b class="num" data-to="3">3</b><span class="unit" data-i18n="spec.os.u">systems</span><p data-i18n="spec.os">Windows, Linux, macOS. Built by CI from the tag, with SHA256SUMS.</p></div>
+</section>
+
+<section class="eq" id="eq">
+  <div class="eq-text">
+    <p class="over mono" data-i18n="eq.over">02 — Sound</p>
+    <h2 class="h2 reveal"><span data-i18n-html="eq.h">Ten bands. <em>Flat is bypassed,</em> not computed.</span></h2>
+    <p class="body" data-i18n="eq.p">31 Hz to 16 kHz at ±12 dB, with the seven presets the player ships with. Drag a band, or focus it and use the arrow keys, exactly as you would in the terminal.</p>
+    <div class="presets" role="group" aria-label="Presets" data-i18n-aria="eq.presets"></div>
+  </div>
+  <div class="eq-rig reveal">
+    <svg class="eq-curve" viewBox="0 0 1000 250" preserveAspectRatio="none" aria-hidden="true"><path d=""/></svg>
+    <div class="bands"></div>
+  </div>
+</section>
+
+<section class="features">
+  <p class="over mono" data-i18n="feat.over">03 — Everything else</p>
+  <div class="feat-grid">
+    <article class="feat reveal">
+      <h3><span class="mono">i.</span> <span data-i18n="f1.h">On screen</span></h3>
+      <ul>
+        <li data-i18n="f1.a">Album art in colour, from the embedded cover or a cover.jpg beside it. Real pixels in Windows Terminal, kitty, WezTerm, Ghostty, foot and xterm.</li>
+        <li data-i18n="f1.b">Lyrics with the current word lit, from a .lrc file or LRCLIB, shiftable per track.</li>
+        <li data-i18n="f1.c">Live FFT spectrum, a braille waveform of the whole track, a reactive sphere.</li>
+        <li data-i18n="f1.d">English and Turkish, switched without restarting.</li>
+      </ul>
+    </article>
+    <article class="feat reveal">
+      <h3><span class="mono">ii.</span> <span data-i18n="f2.h">Your library</span></h3>
+      <ul>
+        <li data-i18n="f2.a">Folders and m3u, m3u8, pls playlists are equally valid roots.</li>
+        <li data-i18n="f2.b">Titles from the tags, cached by size and time, so a large library pays once.</li>
+        <li data-i18n="f2.c">Queue, shuffle, repeat, filters, and five sort orders including by album.</li>
+        <li data-i18n="f2.d">w writes what you built as an m3u8 with relative paths. l likes, v cycles liked, most played, recent.</li>
+      </ul>
+    </article>
+    <article class="feat reveal">
+      <h3><span class="mono">iii.</span> <span data-i18n="f3.h">Outside the window</span></h3>
+      <ul>
+        <li data-i18n="f3.a">Media keys work while the terminal is in the background.</li>
+        <li data-i18n="f3.b">Survives an unplugged headset: it reopens the device and keeps going.</li>
+        <li data-i18n="f3.c">A sleep timer, and a window title that says what is playing.</li>
+        <li data-i18n="f3.d">Online search, streaming and downloads when yt-dlp is on PATH.</li>
+      </ul>
+    </article>
+  </div>
+</section>
+
+<section class="keys" id="keys">
+  <div class="keys-head">
+    <p class="over mono" data-i18n="keys.over">04 — Keys</p>
+    <h2 class="h2 reveal"><span data-i18n-html="keys.h">The page knows them <em>too.</em></span></h2>
+    <p class="body" data-i18n="keys.p">Press p, n, b, the arrows, 1 or 2 anywhere on this page and the player at the top answers.</p>
+  </div>
+  <ul class="caps">
+    <li data-key="/"><kbd>/</kbd><span data-i18n="k.search">Search local</span></li>
+    <li data-key="p"><kbd>p</kbd><span data-i18n="k.play">Play / pause</span></li>
+    <li data-key="Enter"><kbd>Enter</kbd><span data-i18n="k.sel">Play selection</span></li>
+    <li data-key="n"><kbd>n</kbd><span data-i18n="k.next">Next</span></li>
+    <li data-key="b"><kbd>b</kbd><span data-i18n="k.prev">Previous</span></li>
+    <li data-key="ArrowLeft"><kbd>←</kbd><span data-i18n="k.back">Seek back</span></li>
+    <li data-key="ArrowRight"><kbd>→</kbd><span data-i18n="k.fwd">Seek forward</span></li>
+    <li data-key="1"><kbd>1</kbd><span data-i18n="k.vdown">Volume down</span></li>
+    <li data-key="2"><kbd>2</kbd><span data-i18n="k.vup">Volume up</span></li>
+    <li data-key="m"><kbd>m</kbd><span data-i18n="k.shuf">Shuffle</span></li>
+    <li data-key="r"><kbd>r</kbd><span data-i18n="k.rep">Repeat</span></li>
+    <li data-key="a"><kbd>a</kbd><span data-i18n="k.q">Queue</span></li>
+    <li data-key="Tab"><kbd>Tab</kbd><span data-i18n="k.tab">Switch panel</span></li>
+    <li data-key="s"><kbd>s</kbd><span data-i18n="k.set">Settings</span></li>
+    <li data-key="?"><kbd>?</kbd><span data-i18n="k.help">Every key on screen</span></li>
+  </ul>
+</section>
+
+<section class="install" id="install">
+  <p class="over mono" data-i18n="inst.over">05 — Install</p>
+  <h2 class="h2 big reveal"><span data-i18n-html="inst.h">Three <em>minutes.</em></span></h2>
+  <div class="tabs" role="tablist" aria-label="Install method">
+    <button role="tab" id="tab-scoop" aria-controls="p-scoop" aria-selected="true">Scoop</button>
+    <button role="tab" id="tab-dl" aria-controls="p-dl" aria-selected="false" tabindex="-1" data-i18n="inst.tab.dl">Download</button>
+    <button role="tab" id="tab-path" aria-controls="p-path" aria-selected="false" tabindex="-1">PATH</button>
+    <button role="tab" id="tab-src" aria-controls="p-src" aria-selected="false" tabindex="-1" data-i18n="inst.tab.src">Build</button>
+  </div>
+  <div class="panel" role="tabpanel" id="p-scoop" aria-labelledby="tab-scoop">
+    <p data-i18n="inst.scoop">On Windows, scoop does the whole thing:</p>
+    <pre class="code"><code>scoop bucket add tlk https://github.com/Talkdedsec/scoop-tlk
+scoop install tlk/tlk-tune</code><button class="copy" type="button" data-i18n="copy">Copy</button></pre>
+  </div>
+  <div class="panel" role="tabpanel" id="p-dl" aria-labelledby="tab-dl" hidden>
+    <ol class="steps">
+      <li data-i18n="inst.dl1">Take the build for your system. Windows is where it has lived longest; Linux and macOS are newer and less travelled.</li>
+      <li data-i18n="inst.dl2">Run it. With nothing configured it scans your Music and Downloads folders, so there is usually something to play straight away.</li>
+      <li data-i18n="inst.dl3">? shows every key and gesture. s opens the settings; the PATHS tab points it at the folder your music really lives in.</li>
+    </ol>
+    <div class="builds">
+      <a href="https://github.com/Talkdedsec/tlk-tune/releases/latest/download/tlk-tune-windows-x86_64.exe"><b>Windows</b><span>x86_64 · .exe</span></a>
+      <a href="https://github.com/Talkdedsec/tlk-tune/releases/latest/download/tlk-tune-linux-x86_64"><b>Linux</b><span>x86_64</span></a>
+      <a href="https://github.com/Talkdedsec/tlk-tune/releases/latest/download/tlk-tune-macos-aarch64"><b>macOS</b><span>Apple silicon</span></a>
+      <a href="https://github.com/Talkdedsec/tlk-tune/releases/latest/download/SHA256SUMS"><b>SHA256SUMS</b><span data-i18n="inst.sums">check a download</span></a>
+    </div>
+  </div>
+  <div class="panel" role="tabpanel" id="p-path" aria-labelledby="tab-path" hidden>
+    <p data-i18n="inst.path">Optional. It runs from wherever it sits; this puts it on your PATH as tlk-tune and tune, and adds “Play with tlk-tune” to the right-click menu of audio files. No administrator rights, and --uninstall takes every part back out.</p>
+    <pre class="code"><code>tlk-tune.exe --install</code><button class="copy" type="button" data-i18n="copy">Copy</button></pre>
+  </div>
+  <div class="panel" role="tabpanel" id="p-src" aria-labelledby="tab-src" hidden>
+    <p data-i18n="inst.src">Rust 1.88 or newer, and on Linux the ALSA headers (libasound2-dev).</p>
+    <pre class="code"><code>git clone https://github.com/Talkdedsec/tlk-tune.git
+cd tlk-tune
+cargo build --release</code><button class="copy" type="button" data-i18n="copy">Copy</button></pre>
+  </div>
+  <p class="quiet" data-i18n="inst.quiet">Nothing is written outside %APPDATA%\tlk-tune and %LOCALAPPDATA%\tlk-tune until you ask for it.</p>
+</section>
+</main>
+
+<footer class="foot">
+  <p class="foot-word" aria-hidden="true">tlk-tune<span class="caret"></span></p>
+  <div class="foot-row">
+    <nav aria-label="Project">
+      <a href="https://github.com/Talkdedsec/tlk-tune">GitHub</a>
+      <a href="https://github.com/Talkdedsec/tlk-tune/releases" data-i18n="foot.rel">Releases</a>
+      <a href="https://github.com/Talkdedsec/tlk-tune/blob/master/docs/architecture.md" data-i18n="foot.arch">How it is built</a>
+      <a href="https://github.com/Talkdedsec/tlk-tune/blob/master/CHANGELOG.md" data-i18n="foot.log">Changelog</a>
+      <a href="https://github.com/Talkdedsec/tlk-tune/security/policy" data-i18n="foot.sec">Security</a>
+    </nav>
+    <p class="mono">MIT · © 2026 <a href="https://talkdedsec.com">Talkdedsec</a></p>
+  </div>
+</footer>
+</body>
+</html>
